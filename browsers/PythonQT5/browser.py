@@ -188,6 +188,8 @@ class ObjectItemWidget(QtWidgets.QWidget):
         # Add widgets to layout (ensure they are children so they render)
         layout.addWidget(icon_label, alignment=QtCore.Qt.AlignHCenter)
         layout.addWidget(title_label, alignment=QtCore.Qt.AlignHCenter)
+        # Base, non-selected visual so selection doesn't shift layout
+        self.setStyleSheet("border: 1px solid transparent; border-radius: 6px;")
 
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
         try:
@@ -200,9 +202,9 @@ class ObjectItemWidget(QtWidgets.QWidget):
 
     def set_selected(self, selected: bool) -> None:
         if selected:
-            self.setStyleSheet("#objectItemWidget { border: 1px solid #007aff; border-radius: 6px; background-color: rgba(0, 122, 255, 0.08); }")
+            self.setStyleSheet("border: 1px solid #007aff; border-radius: 6px; background-color: rgba(0, 122, 255, 0.08);")
         else:
-            self.setStyleSheet("")
+            self.setStyleSheet("border: 1px solid transparent; border-radius: 6px; background-color: transparent;")
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
         self.clicked.emit(self._obj)
