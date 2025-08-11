@@ -1,0 +1,6 @@
+{
+    "class": "WPObject",
+    "id": "/ComputeSystems/RED",
+    "icon": "./Resources/Compute.png",
+    "title": "Research Desktop"
+}

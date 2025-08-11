@@ -1,0 +1,6 @@
+{
+    "class": "WPObject",
+    "id": "/ComputeSystems/Quartz",
+    "icon": "./Resources/Compute.png",
+    "title": "Quartz"
+}

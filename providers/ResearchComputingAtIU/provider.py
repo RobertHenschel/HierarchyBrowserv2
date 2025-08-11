@@ -4,37 +4,76 @@ import base64
 import json
 import socketserver
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
-ROOT_OBJECTS_FILE = PROVIDER_DIR / "RootObjects.json"
+OBJECTS_DIR = PROVIDER_DIR / "Objects"
 
 
-def _encode_icon_to_base64(icon_path: Union[str, Path]) -> str:
+def _encode_icon_to_base64(icon_path: Union[str, Path], base_dir: Optional[Path] = None) -> str:
     path = Path(icon_path)
     if not path.is_absolute():
-        path = (PROVIDER_DIR / path).resolve()
+        root = base_dir or PROVIDER_DIR
+        path = (root / path).resolve()
     with path.open("rb") as f:
         raw = f.read()
     b64 = base64.b64encode(raw).decode("ascii")
     return b64
 
 
-def get_root_objects_payload() -> Dict[str, Any]:
-    with ROOT_OBJECTS_FILE.open("r", encoding="utf-8") as f:
-        data: Dict[str, Any] = json.load(f)
+def _gather_objects_from_directory(directory: Path) -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+    if not directory.exists() or not directory.is_dir():
+        return results
 
-    objects: List[Dict[str, Any]] = data.get("objects", [])  # type: ignore[assignment]
-    for obj in objects:
-        icon_value = obj.get("icon")
-        if isinstance(icon_value, str) and icon_value:
+    for entry in sorted(directory.iterdir()):
+        if not (entry.is_file() and entry.suffix.lower() == ".json"):
+            continue
+        try:
+            with entry.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+
+        # Determine companion directory name based on file stem
+        companion_dir = directory / entry.stem
+        objects_count = 0
+        if companion_dir.exists() and companion_dir.is_dir():
             try:
-                obj["icon"] = _encode_icon_to_base64(icon_value)
-            except FileNotFoundError:
-                obj["icon"] = None
-        # else: leave as-is
+                objects_count = sum(1 for p in companion_dir.iterdir() if p.is_file() and p.suffix.lower() == ".json")
+            except Exception:
+                objects_count = 0
 
+        def push(obj: Any) -> None:
+            if isinstance(obj, dict):
+                # Inline icon
+                icon_value = obj.get("icon")
+                if isinstance(icon_value, str) and icon_value:
+                    try:
+                        # Always resolve relative to the provider's directory
+                        obj["icon"] = _encode_icon_to_base64(icon_value, base_dir=PROVIDER_DIR)
+                    except FileNotFoundError:
+                        obj["icon"] = None
+                # Attach objects count inferred from companion directory
+                obj["objects"] = int(objects_count)
+                results.append(obj)
+
+        if isinstance(data, list):
+            for item in data:
+                push(item)
+        elif isinstance(data, dict):
+            if isinstance(data.get("objects"), list):
+                for item in data["objects"]:
+                    push(item)
+            else:
+                push(data)
+
+    return results
+
+
+def get_root_objects_payload() -> Dict[str, Any]:
+    objects = _gather_objects_from_directory(OBJECTS_DIR)
     return {"objects": objects}
 
 
@@ -57,6 +96,25 @@ def _is_get_root_objects(message: Any) -> bool:
     return False
 
 
+def _is_get_info(message: Any) -> bool:
+    if isinstance(message, str):
+        return message.strip() == "GetInfo"
+    if isinstance(message, dict):
+        candidate_keys = [
+            "method",
+            "message",
+            "type",
+            "command",
+            "action",
+        ]
+        if any(message.get(k) == "GetInfo" for k in candidate_keys):
+            return True
+        if "GetInfo" in message:
+            value = message.get("GetInfo")
+            return bool(value) if value is not None else True
+    return False
+
+
 class JsonLineHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         line = self.rfile.readline()
@@ -75,6 +133,8 @@ class JsonLineHandler(socketserver.StreamRequestHandler):
                 self._send_json(payload)
             except Exception as exc:
                 self._send_json({"error": f"Failed to serve objects: {exc}"})
+        elif _is_get_info(incoming):
+            self._send_json({"RootName": "Research Computing"})
         else:
             self._send_json({"error": "Unknown message"})
 
