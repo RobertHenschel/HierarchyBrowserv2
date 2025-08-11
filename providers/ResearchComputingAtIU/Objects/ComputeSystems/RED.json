@@ -1,6 +1,9 @@
 {
-    "class": "WPObject",
+    "class": "WPComputeSystem",
     "id": "/ComputeSystems/RED",
     "icon": "./Resources/Compute.png",
-    "title": "Research Desktop"
+    "title": "Research Desktop",
+    "description": "Research Desktop (RED) is a graphical desktop service for users with accounts on the Quartz research supercomputer at Indiana University.",
+    "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023167",
+    "webaccessurl": "https://red.iu.edu"
 }

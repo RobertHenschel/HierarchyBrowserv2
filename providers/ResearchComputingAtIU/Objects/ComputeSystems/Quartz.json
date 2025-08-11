@@ -1,6 +1,9 @@
 {
-    "class": "WPObject",
+    "class": "WPComputeSystem",
     "id": "/ComputeSystems/Quartz",
     "icon": "./Resources/Compute.png",
-    "title": "Quartz"
+    "title": "Quartz",
+    "description": "Quartz is Indiana University's high-throughput computing cluster.",
+    "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023985",
+    "sshaccesshostname": "quartz.uits.iu.edu"
 }
