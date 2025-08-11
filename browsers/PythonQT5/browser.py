@@ -258,6 +258,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.load_root()
 
     def clear_grid(self) -> None:
+        # Reset selection because existing widgets will be deleted
+        self.selected_item = None
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             w = item.widget()
@@ -313,7 +315,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.selected_item is sender:
             return
         if self.selected_item is not None:
-            self.selected_item.set_selected(False)
+            try:
+                self.selected_item.set_selected(False)
+            except RuntimeError:
+                # Previously selected widget was already deleted by a reload
+                pass
         sender.set_selected(True)
         self.selected_item = sender
 
