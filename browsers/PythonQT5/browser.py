@@ -6,6 +6,7 @@ import sys
 from typing import Any, Dict, List
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import pyqtSignal
 
 
 PROVIDER_HOST = "127.0.0.1"
@@ -92,9 +93,12 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
 
 
 class ObjectItemWidget(QtWidgets.QWidget):
+    activated = pyqtSignal(dict)
+
     def __init__(self, obj: Dict[str, Any], parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setToolTip(obj.get("class", ""))
+        self._obj = obj
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
@@ -119,17 +123,34 @@ class ObjectItemWidget(QtWidgets.QWidget):
         title_font.setUnderline(objects_count > 0)
         title_label.setFont(title_font)
 
+        # Visual affordance for clickable folder-like items
+        if objects_count > 0:
+            self.setCursor(QtCore.Qt.PointingHandCursor)
+
         icon_b64 = obj.get("icon") or ""
         pix = pixmap_from_base64(icon_b64, size=48)
         pix = add_badge_to_pixmap(pix, objects_count)
         if not pix.isNull():
             icon_label.setPixmap(pix)
 
+        # Add widgets to layout (ensure they are children so they render)
         layout.addWidget(icon_label, alignment=QtCore.Qt.AlignHCenter)
         layout.addWidget(title_label, alignment=QtCore.Qt.AlignHCenter)
 
+    def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
+        try:
+            objects_count = int(self._obj.get("objects", 0))
+        except Exception:
+            objects_count = 0
+        if objects_count > 0:
+            self.activated.emit(self._obj)
+        super().mouseDoubleClickEvent(event)
+
+        
+
 
 class BreadcrumbBar(QtWidgets.QWidget):
+    crumbClicked = pyqtSignal(int)
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
@@ -161,6 +182,11 @@ class BreadcrumbBar(QtWidgets.QWidget):
             font = label.font()
             font.setBold(idx == 0)
             label.setFont(font)
+            label.setCursor(QtCore.Qt.PointingHandCursor)
+            # Capture index for click
+            def handler(i: int) -> None:
+                self.crumbClicked.emit(i)
+            label.mousePressEvent = (lambda e, i=idx: handler(i))  # type: ignore[assignment]
             self._h.addWidget(label)
             if idx != len(parts) - 1:
                 sep = QtWidgets.QLabel("›", self)
@@ -178,6 +204,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Breadcrumb bar at the very top
         self.breadcrumb = BreadcrumbBar(container)
+        self.breadcrumb.crumbClicked.connect(self.on_breadcrumb_clicked)
+
+        # Navigation state: list of dicts with id and title (excluding root)
+        self.nav_stack: List[Dict[str, str]] = []
 
         scroll = QtWidgets.QScrollArea(container)
         scroll.setWidgetResizable(True)
@@ -203,22 +233,90 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             info = {}
         root_name = info.get("RootName") if isinstance(info, dict) else None
-        self.breadcrumb.set_path([str(root_name) if root_name else "Root"])
+        self.root_name = str(root_name) if root_name else "Root"
+        self.breadcrumb.set_path([self.root_name])
 
-        self.populate_grid(grid_layout)
+        self.grid_layout = grid_layout
+        self.load_root()
 
-    def populate_grid(self, grid_layout: QtWidgets.QGridLayout) -> None:
-        objects = fetch_root_objects()
+    def clear_grid(self) -> None:
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+    def populate_objects(self, objects: List[Dict[str, Any]]) -> None:
+        self.clear_grid()
         columns = 4
         row = 0
         col = 0
         for obj in objects:
             widget = ObjectItemWidget(obj)
-            grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
+            widget.activated.connect(self.on_item_activated)
+            self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
             col += 1
             if col >= columns:
                 col = 0
                 row += 1
+
+    def load_root(self) -> None:
+        objects = []
+        try:
+            objects = fetch_root_objects()
+        except Exception:
+            objects = []
+        self.populate_objects(objects)
+
+    def load_children(self, object_id: str) -> None:
+        data: Dict[str, Any] = {}
+        try:
+            data = fetch_objects_for_id(object_id)
+        except Exception:
+            data = {}
+        objects = data.get("objects", []) if isinstance(data, dict) else []
+        self.populate_objects(objects)
+
+    def on_item_activated(self, obj: Dict[str, Any]) -> None:
+        object_id = obj.get("id")
+        title = obj.get("title")
+        if not isinstance(object_id, str) or not isinstance(title, str):
+            return
+        # Push into stack and navigate
+        self.nav_stack.append({"id": object_id, "title": title})
+        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        self.load_children(object_id)
+
+    def on_breadcrumb_clicked(self, index: int) -> None:
+        # index 0 is root
+        if index <= 0:
+            self.nav_stack = []
+            self.breadcrumb.set_path([self.root_name])
+            self.load_root()
+            return
+        # Navigate to a depth
+        depth = index  # since root occupies 0
+        if depth - 1 < len(self.nav_stack):
+            self.nav_stack = self.nav_stack[: depth]
+        target_id = self.nav_stack[depth - 1]["id"]
+        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        self.load_children(target_id)
+
+
+def fetch_objects_for_id(object_id: str) -> Dict[str, Any]:
+    payload = {"method": "GetObjects", "id": object_id}
+    message = json.dumps(payload, separators=(",", ":")) + "\n"
+    with socket.create_connection((PROVIDER_HOST, PROVIDER_PORT), timeout=3) as s:
+        s.sendall(message.encode("utf-8"))
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(16384)
+            if not chunk:
+                break
+            buf += chunk
+    if not buf:
+        return {}
+    return json.loads(buf.decode("utf-8").strip())
 
 
 def main() -> None:

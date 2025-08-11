@@ -115,6 +115,44 @@ def _is_get_info(message: Any) -> bool:
     return False
 
 
+def _is_get_objects(message: Any) -> bool:
+    if isinstance(message, dict):
+        candidate_keys = [
+            "method",
+            "message",
+            "type",
+            "command",
+            "action",
+        ]
+        return any(message.get(k) == "GetObjects" for k in candidate_keys)
+    if isinstance(message, str):
+        return message.strip() == "GetObjects"
+    return False
+
+
+def _extract_object_id(message: Any) -> Optional[str]:
+    if isinstance(message, dict):
+        for key in ["id", "path", "object", "objectId", "ObjectId"]:
+            value = message.get(key)
+            if isinstance(value, str):
+                return value
+    return None
+
+
+def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    # Normalize and resolve inside OBJECTS_DIR safely
+    rel = path_str.lstrip("/")
+    base = OBJECTS_DIR.resolve()
+    target = (base / rel).resolve()
+    try:
+        target.relative_to(base)
+    except Exception:
+        # Path escape attempt or invalid
+        return {"objects": []}
+    objects = _gather_objects_from_directory(target)
+    return {"objects": objects}
+
+
 class JsonLineHandler(socketserver.StreamRequestHandler):
     def handle(self) -> None:
         line = self.rfile.readline()
@@ -122,6 +160,7 @@ class JsonLineHandler(socketserver.StreamRequestHandler):
             return
         try:
             text = line.decode("utf-8").strip()
+            print(f"Incoming: {text}", flush=True)
             incoming = json.loads(text)
         except Exception:
             self._send_json({"error": "Invalid JSON"})
@@ -135,6 +174,16 @@ class JsonLineHandler(socketserver.StreamRequestHandler):
                 self._send_json({"error": f"Failed to serve objects: {exc}"})
         elif _is_get_info(incoming):
             self._send_json({"RootName": "Research Computing"})
+        elif _is_get_objects(incoming):
+            object_id = _extract_object_id(incoming)
+            if not object_id:
+                self._send_json({"error": "Missing id"})
+            else:
+                try:
+                    payload = get_objects_for_path(object_id)
+                    self._send_json(payload)
+                except Exception as exc:
+                    self._send_json({"error": f"Failed to list objects: {exc}"})
         else:
             self._send_json({"error": "Unknown message"})
 
