@@ -94,6 +94,7 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
 
 class ObjectItemWidget(QtWidgets.QWidget):
     activated = pyqtSignal(dict)
+    clicked = pyqtSignal(dict)
 
     def __init__(self, obj: Dict[str, Any], parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -146,7 +147,23 @@ class ObjectItemWidget(QtWidgets.QWidget):
             self.activated.emit(self._obj)
         super().mouseDoubleClickEvent(event)
 
-        
+    def set_selected(self, selected: bool) -> None:
+        if selected:
+            self.setStyleSheet(
+                """
+                QWidget {
+                    border: 1px solid #007aff;
+                    border-radius: 6px;
+                    background-color: rgba(0, 122, 255, 0.08);
+                }
+                """
+            )
+        else:
+            self.setStyleSheet("")
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
+        self.clicked.emit(self._obj)
+        super().mousePressEvent(event)
 
 
 class BreadcrumbBar(QtWidgets.QWidget):
@@ -208,6 +225,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Navigation state: list of dicts with id and title (excluding root)
         self.nav_stack: List[Dict[str, str]] = []
+        self.selected_item: ObjectItemWidget | None = None
 
         scroll = QtWidgets.QScrollArea(container)
         scroll.setWidgetResizable(True)
@@ -254,6 +272,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for obj in objects:
             widget = ObjectItemWidget(obj)
             widget.activated.connect(self.on_item_activated)
+            widget.clicked.connect(self.on_item_clicked)
             self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
             col += 1
             if col >= columns:
@@ -286,6 +305,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.nav_stack.append({"id": object_id, "title": title})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         self.load_children(object_id)
+
+    def on_item_clicked(self, obj: Dict[str, Any]) -> None:
+        sender = self.sender()
+        if not isinstance(sender, ObjectItemWidget):
+            return
+        if self.selected_item is sender:
+            return
+        if self.selected_item is not None:
+            self.selected_item.set_selected(False)
+        sender.set_selected(True)
+        self.selected_item = sender
 
     def on_breadcrumb_clicked(self, index: int) -> None:
         # index 0 is root
