@@ -5,5 +5,12 @@
     "title": "Quartz",
     "description": "Quartz is Indiana University's high-throughput computing cluster.",
     "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023985",
-    "sshaccesshostname": "quartz.uits.iu.edu"
+    "sshaccesshostname": "quartz.uits.iu.edu",
+    "contextmenu": [
+        {
+            "title": "Apply for access", 
+            "action": "browser",
+            "url": "https://one.iu.edu/launch-task/iu/account-creation?terms=accounts"
+        }
+    ]
 }

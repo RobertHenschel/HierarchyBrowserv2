@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import webbrowser
 from typing import Any, Dict
 
 from PyQt5 import QtCore, QtWidgets
@@ -68,7 +69,16 @@ def execute_context_action(parent: QtWidgets.QWidget, entry: Dict[str, Any], pos
         QtWidgets.QToolTip.showText(pos, "Command copied to clipboard")
 
     action = entry.get("action")
-    if isinstance(action, str) and action.lower() == "terminal" and isinstance(cmd, str) and cmd:
-        launch_terminal_with_command(cmd)
+    if isinstance(action, str):
+        action_lower = action.lower()
+        if action_lower == "terminal" and isinstance(cmd, str) and cmd:
+            launch_terminal_with_command(cmd)
+        elif action_lower == "browser":
+            url = entry.get("url")
+            if isinstance(url, str) and url:
+                try:
+                    webbrowser.open(url)
+                except Exception:
+                    pass
 
 

@@ -216,7 +216,9 @@ class ObjectItemWidget(QtWidgets.QWidget):
         menu_spec = self._obj.get("contextmenu")
         if not isinstance(menu_spec, list) or len(menu_spec) == 0:
             return
-        menu = QtWidgets.QMenu(self)
+        # Use a parentless menu so it doesn't inherit the tile's stylesheet
+        menu = QtWidgets.QMenu()
+        menu.setStyleSheet("")
         for entry in menu_spec:
             if not isinstance(entry, dict):
                 continue
