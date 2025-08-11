@@ -8,9 +8,27 @@ from typing import Any, Dict, List
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal
 
+# Support running both as a module and as a standalone script
+try:
+    from .details_panel import DetailsPanel  # type: ignore[import-not-found]
+    from .context_actions import execute_context_action  # type: ignore[import-not-found]
+except Exception:
+    # Fallback for `./browser.py` execution (no package context)
+    import os as _os
+    import sys as _sys
+    _this_dir = _os.path.dirname(_os.path.abspath(__file__))
+    if _this_dir not in _sys.path:
+        _sys.path.insert(0, _this_dir)
+    from details_panel import DetailsPanel  # type: ignore[no-redef]
+    from context_actions import execute_context_action  # type: ignore[no-redef]
+
 
 PROVIDER_HOST = "127.0.0.1"
 PROVIDER_PORT = 8888
+
+# Visual constants for consistent icon layout
+ICON_BOX_PX = 64
+ICON_IMAGE_PX = 48
 
 
 def fetch_root_objects(host: str = PROVIDER_HOST, port: int = PROVIDER_PORT) -> List[Dict[str, Any]]:
@@ -46,12 +64,42 @@ def fetch_info(host: str = PROVIDER_HOST, port: int = PROVIDER_PORT) -> Dict[str
     return json.loads(buf.decode("utf-8").strip())
 
 
+def _trim_transparent_margins(image: QtGui.QImage) -> QtGui.QImage:
+    # Convert to ARGB to reliably inspect alpha channel
+    if image.format() != QtGui.QImage.Format_ARGB32:
+        image = image.convertToFormat(QtGui.QImage.Format_ARGB32)
+    width = image.width()
+    height = image.height()
+    left = width
+    right = -1
+    top = height
+    bottom = -1
+    for y in range(height):
+        for x in range(width):
+            if QtGui.QColor(image.pixel(x, y)).alpha() > 0:
+                if x < left:
+                    left = x
+                if x > right:
+                    right = x
+                if y < top:
+                    top = y
+                if y > bottom:
+                    bottom = y
+    if right < left or bottom < top:
+        # Entire image is fully transparent; return as-is
+        return image
+    rect = QtCore.QRect(left, top, right - left + 1, bottom - top + 1)
+    return image.copy(rect)
+
+
 def pixmap_from_base64(b64_png: str, size: int = 96) -> QtGui.QPixmap:
     try:
         raw = base64.b64decode(b64_png)
         image = QtGui.QImage.fromData(raw, "PNG")
         if image.isNull():
             return QtGui.QPixmap()
+        # Normalize by trimming transparent borders so icons align visually
+        image = _trim_transparent_margins(image)
         pix = QtGui.QPixmap.fromImage(image)
         if size:
             pix = pix.scaled(size, size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
@@ -95,9 +143,11 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
 class ObjectItemWidget(QtWidgets.QWidget):
     activated = pyqtSignal(dict)
     clicked = pyqtSignal(dict)
+    contextActionRequested = pyqtSignal(dict, dict)
 
     def __init__(self, obj: Dict[str, Any], parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setObjectName("objectItemWidget")
         self.setToolTip(obj.get("class", ""))
         self._obj = obj
         layout = QtWidgets.QVBoxLayout(self)
@@ -108,6 +158,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
         icon_label = QtWidgets.QLabel(self)
         icon_label.setAlignment(QtCore.Qt.AlignCenter)
         icon_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        icon_label.setFixedSize(ICON_BOX_PX, ICON_BOX_PX)
 
         title_label = QtWidgets.QLabel(self)
         title_label.setAlignment(QtCore.Qt.AlignCenter)
@@ -129,7 +180,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
             self.setCursor(QtCore.Qt.PointingHandCursor)
 
         icon_b64 = obj.get("icon") or ""
-        pix = pixmap_from_base64(icon_b64, size=48)
+        pix = pixmap_from_base64(icon_b64, size=ICON_IMAGE_PX)
         pix = add_badge_to_pixmap(pix, objects_count)
         if not pix.isNull():
             icon_label.setPixmap(pix)
@@ -149,21 +200,38 @@ class ObjectItemWidget(QtWidgets.QWidget):
 
     def set_selected(self, selected: bool) -> None:
         if selected:
-            self.setStyleSheet(
-                """
-                QWidget {
-                    border: 1px solid #007aff;
-                    border-radius: 6px;
-                    background-color: rgba(0, 122, 255, 0.08);
-                }
-                """
-            )
+            self.setStyleSheet("#objectItemWidget { border: 1px solid #007aff; border-radius: 6px; background-color: rgba(0, 122, 255, 0.08); }")
         else:
             self.setStyleSheet("")
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
         self.clicked.emit(self._obj)
         super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event: QtGui.QContextMenuEvent) -> None:  # type: ignore[override]
+        # Ensure right-click also selects the item and updates details panel
+        self.clicked.emit(self._obj)
+        menu_spec = self._obj.get("contextmenu")
+        if not isinstance(menu_spec, list) or len(menu_spec) == 0:
+            return
+        menu = QtWidgets.QMenu(self)
+        for entry in menu_spec:
+            if not isinstance(entry, dict):
+                continue
+            title = entry.get("title")
+            if not isinstance(title, str) or not title:
+                continue
+            action = menu.addAction(title)
+            # Capture entry and cursor position for feedback
+            action.triggered.connect(lambda _=False, e=entry, pos=event.globalPos(): self._on_context_action(e, pos))
+        if not menu.isEmpty():
+            menu.exec_(event.globalPos())
+            
+
+    def _on_context_action(self, entry: Dict[str, Any], pos: QtCore.QPoint) -> None:
+        # Emit for higher-level handling and execute the action
+        self.contextActionRequested.emit(self._obj, entry)
+        execute_context_action(self, entry, pos)
 
 
 class BreadcrumbBar(QtWidgets.QWidget):
@@ -211,75 +279,6 @@ class BreadcrumbBar(QtWidgets.QWidget):
         self._h.addStretch(1)
 
 
-class DetailsPanel(QtWidgets.QWidget):
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-
-        title = QtWidgets.QLabel("Details", self)
-        font = title.font()
-        font.setBold(True)
-        title.setFont(font)
-        layout.addWidget(title)
-
-        self.table = QtWidgets.QTableWidget(self)
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        layout.addWidget(self.table)
-
-        self._placeholder = QtWidgets.QLabel("Select an item to see details", self)
-        pal = self._placeholder.palette()
-        pal.setColor(self._placeholder.foregroundRole(), pal.mid().color())
-        self._placeholder.setPalette(pal)
-        self._placeholder.setAlignment(QtCore.Qt.AlignHCenter)
-        layout.addWidget(self._placeholder)
-        self._placeholder.setVisible(True)
-
-    def clear(self) -> None:
-        self.table.setRowCount(0)
-        self._placeholder.setVisible(True)
-
-    def set_object(self, obj: Dict[str, Any]) -> None:
-        self.table.setRowCount(0)
-        keys = sorted(obj.keys())
-        for key in keys:
-            value = obj.get(key)
-            row_index = self.table.rowCount()
-            self.table.insertRow(row_index)
-
-            key_item = QtWidgets.QTableWidgetItem(str(key))
-            key_item.setFlags(key_item.flags() & ~QtCore.Qt.ItemIsEditable)
-            self.table.setItem(row_index, 0, key_item)
-
-            value_str = self._stringify_value(value)
-            value_item = QtWidgets.QTableWidgetItem(value_str)
-            value_item.setToolTip(self._stringify_value(value, truncate=False))
-            value_item.setFlags(value_item.flags() & ~QtCore.Qt.ItemIsEditable)
-            self.table.setItem(row_index, 1, value_item)
-
-        self.table.resizeColumnsToContents()
-        self._placeholder.setVisible(self.table.rowCount() == 0)
-
-    @staticmethod
-    def _stringify_value(value: Any, truncate: bool = True) -> str:
-        try:
-            if isinstance(value, (dict, list)):
-                text = json.dumps(value, ensure_ascii=False)
-            else:
-                text = str(value)
-        except Exception:
-            text = "<unprintable>"
-        if truncate and isinstance(text, str) and len(text) > 200:
-            return text[:200] + "\u2026"
-        return text
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -434,6 +433,7 @@ def fetch_objects_for_id(object_id: str) -> Dict[str, Any]:
     if not buf:
         return {}
     return json.loads(buf.decode("utf-8").strip())
+
 
 
 def main() -> None:
