@@ -5,6 +5,13 @@
     "title": "Software Packages",
     "description": "Software packages available on Quartz.",
     "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023802",
+    "openaction": [
+        {
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8890
+        }
+    ],
     "contextmenu": [
         {
             "title": "Open Software Browser",

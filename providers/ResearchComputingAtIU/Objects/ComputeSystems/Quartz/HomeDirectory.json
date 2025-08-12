@@ -4,6 +4,13 @@
     "icon": "./Resources/Home.png",
     "title": "Home Directory",
     "description": "Your home directory on Quartz.",
+    "openaction": [
+        {
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8891
+        }
+    ],
     "contextmenu": [
         {
             "title": "Open Directory Browser",
