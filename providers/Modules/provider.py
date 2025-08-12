@@ -100,24 +100,24 @@ def _list_lmod_top_dirs() -> List[str]:
         return []
 
 
+def _count_module_children(base: Path) -> int:
+    total = 0
+    try:
+        for mf in base.rglob("modulefiles"):
+            if mf.is_dir():
+                try:
+                    total += sum(1 for e in mf.iterdir() if e.is_dir())
+                except Exception:
+                    continue
+    except Exception:
+        return 0
+    return total
+
+
 def get_root_objects_payload() -> Dict[str, Any]:
     names = _list_lmod_top_dirs()
     icon_b64 = _encode_icon_to_base64(ICON_PATH)
     objects: List[Dict[str, Any]] = []
-    
-    def _count_module_children(base: Path) -> int:
-        total = 0
-        try:
-            for mf in base.rglob("modulefiles"):
-                if mf.is_dir():
-                    try:
-                        total += sum(1 for e in mf.iterdir() if e.is_dir())
-                    except Exception:
-                        continue
-        except Exception:
-            return 0
-        return total
-
     for name in names:
         count = _count_module_children(LMOD_ROOT / name)
         objects.append(
@@ -132,9 +132,32 @@ def get_root_objects_payload() -> Dict[str, Any]:
     return {"objects": objects}
 
 
-def get_objects_for_path(_path_str: str) -> Dict[str, Any]:
-    # Future: populate module names/versions beneath a top-level family
-    return {"objects": []}
+def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    rel = path_str.lstrip("/")
+    base = (LMOD_ROOT / rel)
+    objects: List[Dict[str, Any]] = []
+    icon_b64 = _encode_icon_to_base64(ICON_PATH)
+    try:
+        if base.exists() and base.is_dir():
+            for entry in sorted(base.iterdir()):
+                if not entry.is_dir():
+                    continue
+                if entry.name == "modulefiles":
+                    continue
+                count = _count_module_children(entry)
+                obj_id = f"/{rel}/{entry.name}" if rel else f"/{entry.name}"
+                objects.append(
+                    {
+                        "class": "WPLmodDependency",
+                        "id": obj_id,
+                        "icon": icon_b64,
+                        "title": entry.name,
+                        "objects": int(count),
+                    }
+                )
+    except Exception:
+        pass
+    return {"objects": objects}
 
 
 class JsonLineHandler(socketserver.StreamRequestHandler):
