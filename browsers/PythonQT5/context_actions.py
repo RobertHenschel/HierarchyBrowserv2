@@ -2,6 +2,7 @@
 import os
 import shutil
 import subprocess
+import sys
 import webbrowser
 from typing import Any, Dict
 
@@ -19,6 +20,52 @@ def launch_terminal_with_command(command: str) -> bool:
 
     # Command executed inside an interactive shell; keep the window open afterwards
     shell_cmd = ["bash", "-lc", f"{command}; exec bash"]
+
+    # macOS: prefer Terminal.app or iTerm2 via AppleScript
+    if sys.platform == "darwin":
+        def _escape_for_applescript(cmd: str) -> str:
+            # Escape backslashes and quotes for AppleScript string
+            return cmd.replace("\\", "\\\\").replace('"', '\\"')
+
+        escaped = _escape_for_applescript(f"bash -lc \"{command}; exec bash\"")
+
+        # Try Terminal.app – avoid double windows: do not activate before running.
+        # If no windows are open, `do script` creates one; otherwise reuse front window (new tab).
+        script_terminal = (
+            'tell application "Terminal"\n'
+            '  if (count of windows) is 0 then\n'
+            f'    do script "{escaped}"\n'
+            '  else\n'
+            f'    do script "{escaped}" in front window\n'
+            '  end if\n'
+            '  activate\n'
+            'end tell'
+        )
+        try:
+            subprocess.Popen(["osascript", "-e", script_terminal])
+            return True
+        except Exception:
+            pass
+
+        # Try iTerm2 (or iTerm) if available
+        for app_name in ("iTerm2", "iTerm"):
+            script_iterm = (
+                f'tell application "{app_name}"\n'
+                f'  activate\n'
+                f'  try\n'
+                f'    create window with default profile\n'
+                f'  end try\n'
+                f'  tell current session of current window\n'
+                f'    write text "{escaped}"\n'
+                f'  end tell\n'
+                f'end tell'
+            )
+            try:
+                subprocess.Popen(["osascript", "-e", script_iterm])
+                return True
+            except Exception:
+                continue
+        # Fall through to generic approaches below
 
     candidates: list[list[str]] = []
 
