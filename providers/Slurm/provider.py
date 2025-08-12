@@ -70,18 +70,6 @@ class SlurmProvider(ObjectProvider):
             )
         return {"objects": objects}
 
-
-def _get_jobs_for_partition(partition: str) -> List[str]:
-    part = partition.lstrip("/")
-    # Try squeue first for job IDs in this partition
-    try:
-        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i"], text=True)
-        jobs = [line.strip() for line in out.splitlines() if line.strip()]
-        return jobs
-    except Exception:
-        return []
-
-
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
         if path_str.strip() == "/" or path_str.strip() == "":
             return self.get_root_objects_payload()
@@ -100,6 +88,17 @@ def _get_jobs_for_partition(partition: str) -> List[str]:
                 }
             )
         return {"objects": objects}
+
+
+def _get_jobs_for_partition(partition: str) -> List[str]:
+    part = partition.lstrip("/")
+    # Try squeue first for job IDs in this partition
+    try:
+        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i"], text=True)
+        jobs = [line.strip() for line in out.splitlines() if line.strip()]
+        return jobs
+    except Exception:
+        return []
 
 
 def main() -> None:
