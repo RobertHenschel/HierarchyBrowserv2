@@ -129,6 +129,9 @@ def get_root_objects_payload() -> Dict[str, Any]:
 
 
 def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    # Treat root requests as a request for partitions
+    if path_str.strip() == "/" or path_str.strip() == "":
+        return get_root_objects_payload()
     home = Path.home().resolve()
     rel = path_str.lstrip("/")
     target = (home / rel).resolve()

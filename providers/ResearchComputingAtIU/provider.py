@@ -140,6 +140,9 @@ def _extract_object_id(message: Any) -> Optional[str]:
 
 
 def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    # Treat root requests as a request for partitions
+    if path_str.strip() == "/" or path_str.strip() == "":
+        return get_root_objects_payload()
     # Normalize and resolve inside OBJECTS_DIR safely
     rel = path_str.lstrip("/")
     base = OBJECTS_DIR.resolve()
