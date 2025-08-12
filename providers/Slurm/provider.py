@@ -1,73 +1,19 @@
 #!/usr/bin/env python3
 import argparse
 import base64
-import json
-import socketserver
 import subprocess
+import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict, List
 
+# Allow running this file directly: add project root to sys.path
+_THIS = Path(__file__).resolve()
+_PROVIDERS_DIR = _THIS.parent.parent
+_PROJECT_ROOT = _PROVIDERS_DIR.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-def _is_get_root_objects(message: Any) -> bool:
-    if isinstance(message, str):
-        return message.strip() == "GetRootObjects"
-    if isinstance(message, dict):
-        candidate_keys = [
-            "method",
-            "message",
-            "type",
-            "command",
-            "action",
-        ]
-        if any(message.get(k) == "GetRootObjects" for k in candidate_keys):
-            return True
-        if "GetRootObjects" in message:
-            value = message.get("GetRootObjects")
-            return bool(value) if value is not None else True
-    return False
-
-
-def _is_get_info(message: Any) -> bool:
-    if isinstance(message, str):
-        return message.strip() == "GetInfo"
-    if isinstance(message, dict):
-        candidate_keys = [
-            "method",
-            "message",
-            "type",
-            "command",
-            "action",
-        ]
-        if any(message.get(k) == "GetInfo" for k in candidate_keys):
-            return True
-        if "GetInfo" in message:
-            value = message.get("GetInfo")
-            return bool(value) if value is not None else True
-    return False
-
-
-def _is_get_objects(message: Any) -> bool:
-    if isinstance(message, dict):
-        candidate_keys = [
-            "method",
-            "message",
-            "type",
-            "command",
-            "action",
-        ]
-        return any(message.get(k) == "GetObjects" for k in candidate_keys)
-    if isinstance(message, str):
-        return message.strip() == "GetObjects"
-    return False
-
-
-def _extract_object_id(message: Any) -> Optional[str]:
-    if isinstance(message, dict):
-        for key in ["id", "path", "object", "objectId", "ObjectId"]:
-            value = message.get(key)
-            if isinstance(value, str):
-                return value
-    return None
+from providers.base import ObjectProvider, ProviderOptions
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
@@ -75,7 +21,7 @@ PARTITION_ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
 JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job.png"
 
 
-def _encode_icon_to_base64(icon_path: Path) -> Optional[str]:
+def _encode_icon_to_base64(icon_path: Path) -> str | None:
     try:
         with icon_path.open("rb") as f:
             raw = f.read()
@@ -113,25 +59,26 @@ def _get_slurm_partitions() -> List[str]:
         return []
 
 
-def get_root_objects_payload() -> Dict[str, Any]:
-    partitions = _get_slurm_partitions()
-    icon_b64 = _encode_icon_to_base64(PARTITION_ICON_PATH)
-    objects: List[Dict[str, Any]] = []
-    for part in partitions:
-        try:
-            job_count = len(_get_jobs_for_partition(part))
-        except Exception:
-            job_count = 0
-        objects.append(
-            {
-                "class": "WPSlurmPartition",
-                "id": f"/{part}",
-                "icon": icon_b64,
-                "title": part,
-                "objects": int(job_count),
-            }
-        )
-    return {"objects": objects}
+class SlurmProvider(ObjectProvider):
+    def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
+        partitions = _get_slurm_partitions()
+        icon_b64 = _encode_icon_to_base64(PARTITION_ICON_PATH)
+        objects: List[Dict[str, object]] = []
+        for part in partitions:
+            try:
+                job_count = len(_get_jobs_for_partition(part))
+            except Exception:
+                job_count = 0
+            objects.append(
+                {
+                    "class": "WPSlurmPartition",
+                    "id": f"/{part}",
+                    "icon": icon_b64,
+                    "title": part,
+                    "objects": int(job_count),
+                }
+            )
+        return {"objects": objects}
 
 
 def _get_jobs_for_partition(partition: str) -> List[str]:
@@ -145,83 +92,43 @@ def _get_jobs_for_partition(partition: str) -> List[str]:
         return []
 
 
-def get_objects_for_path(path_str: str) -> Dict[str, Any]:
-    # Treat root requests as a request for partitions
-    if path_str.strip() == "/" or path_str.strip() == "":
-        return get_root_objects_payload()
-    part = path_str.lstrip("/")
-    job_ids = _get_jobs_for_partition(part)
-    icon_b64 = _encode_icon_to_base64(JOB_ICON_PATH)
-    objects: List[Dict[str, Any]] = []
-    for jid in job_ids:
-        objects.append(
-            {
-                "class": "WPSlurmJob",
-                "id": f"/{part}/{jid}",
-                "icon": icon_b64,
-                "title": jid,
-                "objects": 0,
-            }
-        )
-    return {"objects": objects}
+    def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
+        if path_str.strip() == "/" or path_str.strip() == "":
+            return self.get_root_objects_payload()
+        part = path_str.lstrip("/")
+        job_ids = _get_jobs_for_partition(part)
+        icon_b64 = _encode_icon_to_base64(JOB_ICON_PATH)
+        objects: List[Dict[str, object]] = []
+        for jid in job_ids:
+            objects.append(
+                {
+                    "class": "WPSlurmJob",
+                    "id": f"/{part}/{jid}",
+                    "icon": icon_b64,
+                    "title": jid,
+                    "objects": 0,
+                }
+            )
+        return {"objects": objects}
 
 
-class JsonLineHandler(socketserver.StreamRequestHandler):
-    def handle(self) -> None:
-        line = self.rfile.readline()
-        if not line:
-            return
-        try:
-            text = line.decode("utf-8").strip()
-            print(f"Incoming: {text}", flush=True)
-            incoming = json.loads(text)
-        except Exception:
-            self._send_json({"error": "Invalid JSON"})
-            return
-
-        if _is_get_root_objects(incoming):
-            try:
-                payload = get_root_objects_payload()
-                self._send_json(payload)
-            except Exception as exc:
-                self._send_json({"error": f"Failed to serve objects: {exc}"})
-        elif _is_get_info(incoming):
-            self._send_json({"RootName": "Slurm Batch System"})
-        elif _is_get_objects(incoming):
-            _id = _extract_object_id(incoming)
-            if not _id:
-                self._send_json({"error": "Missing id"})
-            else:
-                try:
-                    payload = get_objects_for_path(_id)
-                    self._send_json(payload)
-                except Exception as exc:
-                    self._send_json({"error": f"Failed to list objects: {exc}"})
-        else:
-            self._send_json({"error": "Unknown message"})
-
-    def _send_json(self, payload: Dict[str, Any]) -> None:
-        data = json.dumps(payload, separators=(",", ":")) + "\n"
-        self.wfile.write(data.encode("utf-8"))
-
-
-def serve(host: str = "127.0.0.1", port: int = 8888) -> None:
-    class ReusableTCPServer(socketserver.ThreadingTCPServer):
-        allow_reuse_address = True
-
-    with ReusableTCPServer((host, port), JsonLineHandler) as server:
-        print(f"Provider listening on {host}:{port}", flush=True)
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
-
-
-if __name__ == "__main__":
+def main() -> None:
     parser = argparse.ArgumentParser(description="Slurm Object Provider")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8888, help="Port to bind (default: 8888)")
     args = parser.parse_args()
-    serve(args.host, args.port)
+
+    provider = SlurmProvider(
+        ProviderOptions(
+            root_name="Slurm Batch System",
+            provider_dir=PROVIDER_DIR,
+            resources_dir=PROVIDER_DIR / "Resources",
+        )
+    )
+    provider.serve(args.host, args.port)
+
+
+if __name__ == "__main__":
+    main()
 
 
