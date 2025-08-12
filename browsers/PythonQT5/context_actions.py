@@ -127,5 +127,20 @@ def execute_context_action(parent: QtWidgets.QWidget, entry: Dict[str, Any], pos
                     webbrowser.open(url)
                 except Exception:
                     pass
+        elif action_lower == "objectbrowser":
+            # Launch another instance of the Qt object browser with overrides
+            host = entry.get("hostname") or entry.get("host") or "127.0.0.1"
+            port = entry.get("port")
+            try:
+                port_str = str(int(port)) if port is not None else "8888"
+            except Exception:
+                port_str = "8888"
+
+            here = os.path.dirname(os.path.abspath(__file__))
+            browser_py = os.path.join(here, "browser.py")
+            try:
+                subprocess.Popen([sys.executable, browser_py, "--host", str(host), "--port", port_str])
+            except Exception:
+                QtWidgets.QToolTip.showText(pos, "Failed to launch object browser")
 
 
