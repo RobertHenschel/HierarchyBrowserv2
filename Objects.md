@@ -1,8 +1,8 @@
 ### Objects
 
-Concise reference for the object model used by the provider and browser. Objects are simple JSON documents stored under `providers/ResearchComputingAtIU/Objects/` and served over the protocol described in `Protocol.md`.
+Concise reference for the object model used by the providers and browser. Research Computing objects are authored under `providers/ResearchComputingAtIU/Objects/`. Slurm objects are produced dynamically by the Slurm provider. Both are served over the protocol described in `Protocol.md`.
 
-### Type: WPObject
+### Type: WPObject (ResearchComputingAtIU)
 
 All objects are of class `WPObject`.
 
@@ -71,4 +71,41 @@ Example (child object file):
 - Root objects
   - **Compute Systems** (`id`: `/ComputeSystems`) → children in `Objects/ComputeSystems/` (e.g., `Quartz`, `RED`).
   - **Storage Systems** (`id`: `/StorageSystems`) → children in `Objects/StorageSystems/` (none in repo at present).
+
+### Slurm provider objects (dynamic)
+
+- **WPSlurmPartition**
+  - `id`: `/<partition_name>`
+  - `title`: `<partition_name>`
+  - `icon`: base64 of `providers/Slurm/Resources/Partition.png`
+  - `objects`: live job count for the partition
+
+- **WPSlurmJob**
+  - `id`: `/<partition_name>/<job_id>`
+  - `title`: `<job_id>`
+  - `icon`: base64 of `providers/Slurm/Resources/Job.png`
+  - `objects`: `0`
+
+### Context menus
+
+Objects may define a `contextmenu` array with entries of these forms:
+
+- `{"title": "SSH", "action": "terminal", "command": "ssh quartz-login"}`
+  - Opens a terminal and runs the command (also copied to clipboard)
+- `{"title": "Docs", "action": "browser", "url": "https://example.org"}`
+  - Opens the URL in the system browser
+- `{"title": "Open Slurm Browser", "action": "objectbrowser", "hostname": "localhost", "port": 8889}`
+  - Launches another instance of the PyQt object browser pointing at the given provider
+
+### Summary table
+
+| Class               | id pattern                  | title                 | icon (response)            | objects                               | Source                               |
+|---------------------|-----------------------------|-----------------------|----------------------------|----------------------------------------|--------------------------------------|
+| WPObject            | `/segment[/segment…]`       | free text             | base64 PNG (from file)     | child count (json files in directory)  | ResearchComputingAtIU (authored)     |
+| WPComputeSystem     | `/ComputeSystems/<name>`    | `<name>`              | base64 PNG (Compute.png)   | child count (json files in directory)  | ResearchComputingAtIU (authored)     |
+| WPLoginNode         | `/…/LoginNode`              | free text             | base64 PNG (Bash.png)      | provider-computed (typically 0)        | ResearchComputingAtIU (authored)     |
+| WPSlurmBatchSystem  | `/…/SlurmBatchSystem`       | free text             | base64 PNG (Slurm.png)     | provider-computed (typically 0)        | ResearchComputingAtIU (authored)     |
+| WPSlurmPartition    | `/<partition>`              | `<partition>`         | base64 PNG (Partition.png) | number of jobs in partition            | Slurm provider (dynamic)             |
+| WPSlurmJob          | `/<partition>/<job_id>`     | `<job_id>`            | base64 PNG (Job.png)       | 0                                      | Slurm provider (dynamic)             |
+
 
