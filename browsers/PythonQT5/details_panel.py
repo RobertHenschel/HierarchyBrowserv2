@@ -1,14 +1,40 @@
 #!/usr/bin/env python3
 import json
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 from PyQt5 import QtCore, QtWidgets
+from PyQt5.QtWebEngineWidgets import QWebEngineView
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+
+class _TemplateManager:
+    def __init__(self, templates_root: Path) -> None:
+        self.templates_root = templates_root
+        self.env = Environment(
+            loader=FileSystemLoader(str(self.templates_root)),
+            autoescape=select_autoescape(["html", "htm"]),
+            enable_async=False,
+        )
+
+    def select_template_for_class(self, obj_class: Optional[str]) -> str:
+        if isinstance(obj_class, str) and obj_class:
+            candidate = Path("classes") / f"{obj_class}.html"
+            full = self.templates_root / candidate
+            if full.exists():
+                return str(candidate)
+        return "default.html"
+
+    def render(self, template_name: str, context: Dict[str, Any]) -> str:
+        tpl = self.env.get_template(template_name)
+        return tpl.render(**context)
 
 
 class DetailsPanel(QtWidgets.QWidget):
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
@@ -19,15 +45,9 @@ class DetailsPanel(QtWidgets.QWidget):
         title.setFont(font)
         layout.addWidget(title)
 
-        self.table = QtWidgets.QTableWidget(self)
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Property", "Value"])
-        self.table.horizontalHeader().setStretchLastSection(True)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
-        layout.addWidget(self.table)
+        # Web view for rich HTML rendering
+        self.web = QWebEngineView(self)
+        layout.addWidget(self.web, stretch=1)
 
         self._placeholder = QtWidgets.QLabel("Select an item to see details", self)
         pal = self._placeholder.palette()
@@ -37,42 +57,31 @@ class DetailsPanel(QtWidgets.QWidget):
         layout.addWidget(self._placeholder)
         self._placeholder.setVisible(True)
 
+        # Initialize template manager from Templates directory
+        this_dir = Path(__file__).resolve().parent
+        self.templates_root = this_dir / "Templates"
+        self.templates_root.mkdir(parents=True, exist_ok=True)
+        self.tpl_mgr = _TemplateManager(self.templates_root)
+
     def clear(self) -> None:
-        self.table.setRowCount(0)
         self._placeholder.setVisible(True)
+        self.web.setHtml("")
 
     def set_object(self, obj: Dict[str, Any]) -> None:
-        self.table.setRowCount(0)
-        keys = sorted(obj.keys())
-        for key in keys:
-            value = obj.get(key)
-            row_index = self.table.rowCount()
-            self.table.insertRow(row_index)
-
-            key_item = QtWidgets.QTableWidgetItem(str(key))
-            key_item.setFlags(key_item.flags() & ~QtCore.Qt.ItemIsEditable)
-            self.table.setItem(row_index, 0, key_item)
-
-            value_str = self._stringify_value(value)
-            value_item = QtWidgets.QTableWidgetItem(value_str)
-            value_item.setToolTip(self._stringify_value(value, truncate=False))
-            value_item.setFlags(value_item.flags() & ~QtCore.Qt.ItemIsEditable)
-            self.table.setItem(row_index, 1, value_item)
-
-        self.table.resizeColumnsToContents()
-        self._placeholder.setVisible(self.table.rowCount() == 0)
-
-    @staticmethod
-    def _stringify_value(value: Any, truncate: bool = True) -> str:
         try:
-            if isinstance(value, (dict, list)):
-                text = json.dumps(value, ensure_ascii=False)
-            else:
-                text = str(value)
+            obj_class = obj.get("class")
+            template_name = self.tpl_mgr.select_template_for_class(obj_class)
+            html = self.tpl_mgr.render(template_name, {"obj": obj, "json": json})
+            self.web.setHtml(html)
+            self._placeholder.setVisible(False)
         except Exception:
-            text = "<unprintable>"
-        if truncate and isinstance(text, str) and len(text) > 200:
-            return text[:200] + "\u2026"
-        return text
+            # Fallback to a simple JSON dump if rendering fails
+            safe = QtWidgets.QLabel(json.dumps(obj, ensure_ascii=False, indent=2), self)
+            safe.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+            layout: QtWidgets.QVBoxLayout = self.layout()  # type: ignore[assignment]
+            # Remove old web view content and show fallback
+            self.web.setHtml("")
+            layout.addWidget(safe)
+            self._placeholder.setVisible(False)
 
 

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 12px; }
+      h1 { font-size: 20px; margin: 0 0 8px 0; }
+      .subtitle { color: #555; margin-bottom: 12px; }
+      .grid { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; }
+      .key { color: #666; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      pre { background: #f6f8fa; padding: 8px; border-radius: 6px; }
+      .section { margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>{{ obj.title or obj.id or 'Compute System' }}</h1>
+    {% if obj.description %}
+      <div class="subtitle">{{ obj.description }}</div>
+    {% endif %}
+
+    <div class="grid">
+      <div class="key">Identifier</div>
+      <div class="mono">{{ obj.id }}</div>
+
+      {% if obj.kburl %}
+        <div class="key">Knowledge Base</div>
+        <div><a href="{{ obj.kburl }}">{{ obj.kburl }}</a></div>
+      {% endif %}
+
+      {% if obj.objects is defined %}
+        <div class="key">Contained objects</div>
+        <div class="mono">{{ obj.objects }}</div>
+      {% endif %}
+    </div>
+
+    {% if obj.openaction %}
+      <div class="section">
+        <h2>Open Actions</h2>
+        <pre class="mono">{{ json.dumps(obj.openaction, ensure_ascii=False, indent=2) }}</pre>
+      </div>
+    {% endif %}
+
+    {% if obj.contextmenu %}
+      <div class="section">
+        <h2>Context Menu</h2>
+        <pre class="mono">{{ json.dumps(obj.contextmenu, ensure_ascii=False, indent=2) }}</pre>
+      </div>
+    {% endif %}
+  </body>
+  </html>
+
+
