@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import base64
 import subprocess
 import sys
 from pathlib import Path
@@ -19,15 +18,6 @@ from providers.base import ObjectProvider, ProviderOptions
 PROVIDER_DIR = Path(__file__).resolve().parent
 PARTITION_ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
 JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job.png"
-
-
-def _encode_icon_to_base64(icon_path: Path) -> str | None:
-    try:
-        with icon_path.open("rb") as f:
-            raw = f.read()
-        return base64.b64encode(raw).decode("ascii")
-    except FileNotFoundError:
-        return None
 
 
 def _get_slurm_partitions() -> List[str]:
@@ -62,7 +52,7 @@ def _get_slurm_partitions() -> List[str]:
 class SlurmProvider(ObjectProvider):
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         partitions = _get_slurm_partitions()
-        icon_b64 = _encode_icon_to_base64(PARTITION_ICON_PATH)
+        icon_name = f"./resources/{PARTITION_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
         for part in partitions:
             try:
@@ -73,7 +63,7 @@ class SlurmProvider(ObjectProvider):
                 {
                     "class": "WPSlurmPartition",
                     "id": f"/{part}",
-                    "icon": icon_b64,
+                    "icon": icon_name,
                     "title": part,
                     "objects": int(job_count),
                 }
@@ -97,14 +87,14 @@ def _get_jobs_for_partition(partition: str) -> List[str]:
             return self.get_root_objects_payload()
         part = path_str.lstrip("/")
         job_ids = _get_jobs_for_partition(part)
-        icon_b64 = _encode_icon_to_base64(JOB_ICON_PATH)
+        icon_name = f"./resources/{JOB_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
         for jid in job_ids:
             objects.append(
                 {
                     "class": "WPSlurmJob",
                     "id": f"/{part}/{jid}",
-                    "icon": icon_b64,
+                    "icon": icon_name,
                     "title": jid,
                     "objects": 0,
                 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import base64
 import json
 import socketserver
 from abc import ABC, abstractmethod
@@ -103,7 +104,10 @@ class ObjectProvider(ABC):
             except Exception as exc:  # pragma: no cover - defensive
                 return {"error": f"Failed to serve objects: {exc}"}
         if self.is_get_info(incoming):
-            return {"RootName": self.options.root_name}
+            return {
+                "RootName": self.options.root_name,
+                "icons": self._collect_icons_payload(),
+            }
         if self.is_get_objects(incoming):
             object_id = self.extract_object_id(incoming)
             if not object_id:
@@ -158,5 +162,28 @@ class ObjectProvider(ABC):
                 server.serve_forever()
             except KeyboardInterrupt:
                 pass
+
+    # ---- Helpers ----
+    def _collect_icons_payload(self) -> list[dict[str, str]]:
+        icons: list[dict[str, str]] = []
+        resources_dir: Path = self.options.resources_dir
+        try:
+            if resources_dir.exists() and resources_dir.is_dir():
+                for entry in sorted(resources_dir.iterdir(), key=lambda p: p.name.lower()):
+                    if not entry.is_file():
+                        continue
+                    if entry.suffix.lower() != ".png":
+                        continue
+                    try:
+                        data = entry.read_bytes()
+                        b64 = base64.b64encode(data).decode("ascii")
+                        # Expose a normalized client filename with lowercase 'resources'
+                        filename = f"./resources/{entry.name}"
+                        icons.append({"filename": filename, "data": b64})
+                    except Exception:
+                        continue
+        except Exception:
+            return []
+        return icons
 
 
