@@ -71,7 +71,7 @@ def _extract_object_id(message: Any) -> Optional[str]:
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
-ICON_PATH = PROVIDER_DIR / "resources" / "Partition.png"
+ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
 
 
 def _encode_icon_to_base64(icon_path: Path) -> Optional[str]:
