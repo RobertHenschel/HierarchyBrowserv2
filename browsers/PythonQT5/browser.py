@@ -4,7 +4,7 @@ import argparse
 import json
 import socket
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal
@@ -157,11 +157,17 @@ class ObjectItemWidget(QtWidgets.QWidget):
     clicked = pyqtSignal(dict)
     contextActionRequested = pyqtSignal(dict, dict)
 
-    def __init__(self, obj: Dict[str, Any], parent: QtWidgets.QWidget | None = None) -> None:
+    def __init__(
+        self,
+        obj: Dict[str, Any],
+        parent: QtWidgets.QWidget | None = None,
+        icon_lookup: Optional[Callable[[str], QtGui.QPixmap]] = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("objectItemWidget")
         self.setToolTip(obj.get("class", ""))
         self._obj = obj
+        self._icon_lookup = icon_lookup
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
@@ -191,8 +197,17 @@ class ObjectItemWidget(QtWidgets.QWidget):
         if objects_count > 0:
             self.setCursor(QtCore.Qt.PointingHandCursor)
 
-        icon_b64 = obj.get("icon") or ""
-        pix = pixmap_from_base64(icon_b64, size=ICON_IMAGE_PX)
+        # Resolve icon via filename provided in object payload
+        pix = QtGui.QPixmap()
+        icon_spec = obj.get("icon")
+        if isinstance(icon_spec, str) and self._icon_lookup is not None:
+            try:
+                pix = self._icon_lookup(icon_spec)
+            except Exception:
+                pix = QtGui.QPixmap()
+        # Fallback for legacy providers that still send base64 bitstreams
+        if pix.isNull() and isinstance(icon_spec, str) and len(icon_spec) > 64:
+            pix = pixmap_from_base64(icon_spec, size=ICON_IMAGE_PX)
         pix = add_badge_to_pixmap(pix, objects_count)
         if not pix.isNull():
             icon_label.setPixmap(pix)
@@ -292,7 +307,7 @@ class MainWindow(QtWidgets.QMainWindow):
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([500, 300])
 
-        # Fetch info for root name and populate
+        # Fetch info for root name and icons, then populate
         info = {}
         try:
             info = fetch_info()
@@ -301,6 +316,10 @@ class MainWindow(QtWidgets.QMainWindow):
         root_name = info.get("RootName") if isinstance(info, dict) else None
         self.root_name = str(root_name) if root_name else "Root"
         self.breadcrumb.set_path([self.root_name])
+
+        # Decode and store icons announced by provider
+        self.icon_store: Dict[str, QtGui.QPixmap] = {}
+        self.add_icons_from_info(info)
 
         self.grid_layout = grid_layout
         self.load_root(self.root_host, self.root_port)
@@ -320,7 +339,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row = 0
         col = 0
         for obj in objects:
-            widget = ObjectItemWidget(obj)
+            widget = ObjectItemWidget(obj, icon_lookup=self.get_icon_pixmap)
             widget.activated.connect(self.on_item_activated)
             widget.clicked.connect(self.on_item_clicked)
             self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
@@ -328,6 +347,33 @@ class MainWindow(QtWidgets.QMainWindow):
             if col >= columns:
                 col = 0
                 row += 1
+
+    def get_icon_pixmap(self, icon_filename: str) -> QtGui.QPixmap:
+        # Normalize key to the expected './resources/Name.png' form used by providers
+        if not isinstance(icon_filename, str):
+            return QtGui.QPixmap()
+        key = icon_filename
+        return self.icon_store.get(key, QtGui.QPixmap())
+
+    def add_icons_from_info(self, info: Dict[str, Any]) -> None:
+        try:
+            icons = info.get("icons", []) if isinstance(info, dict) else []
+            if not isinstance(icons, list):
+                return
+            for item in icons:
+                if not isinstance(item, dict):
+                    continue
+                filename = item.get("filename")
+                data = item.get("data")
+                if not isinstance(filename, str) or not isinstance(data, str):
+                    continue
+                pix = pixmap_from_base64(data, size=ICON_IMAGE_PX)
+                if not pix.isNull():
+                    # Merge into existing store; overwrites if same key
+                    self.icon_store[filename] = pix
+        except Exception:
+            # Keep existing cache on any parsing error
+            pass
 
     def load_root(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
         objects = []
@@ -389,7 +435,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Push into stack and navigate using next endpoint
         self.nav_stack.append({"id": object_id, "title": title, "host": next_host, "port": str(next_port), "remote_id": remote_id})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        # If switching to a different provider endpoint, fetch its info and merge icons
+        switching = (next_host != self.current_host) or (next_port != self.current_port)
         self.current_host, self.current_port = next_host, next_port
+        if switching:
+            try:
+                info = fetch_info(self.current_host, self.current_port)
+                self.add_icons_from_info(info)
+            except Exception:
+                pass
         self.load_children(remote_id, next_host, next_port)
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
