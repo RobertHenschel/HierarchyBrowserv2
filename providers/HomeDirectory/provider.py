@@ -128,9 +128,57 @@ def get_root_objects_payload() -> Dict[str, Any]:
     return {"objects": objects}
 
 
-def get_objects_for_path(_path_str: str) -> Dict[str, Any]:
-    # To be implemented later
-    return {"objects": []}
+def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    home = Path.home().resolve()
+    rel = path_str.lstrip("/")
+    target = (home / rel).resolve()
+
+    # Prevent escaping outside of the home directory
+    try:
+        target.relative_to(home)
+    except Exception:
+        return {"objects": []}
+
+    dir_icon_b64 = _encode_icon_to_base64(DIR_ICON_PATH)
+    file_icon_b64 = _encode_icon_to_base64(FILE_ICON_PATH)
+    objects: List[Dict[str, Any]] = []
+
+    if not target.exists() or not target.is_dir():
+        return {"objects": objects}
+
+    try:
+        entries = sorted(target.iterdir(), key=lambda p: p.name.lower())
+    except Exception:
+        entries = []
+
+    for entry in entries:
+        name = entry.name
+        if entry.is_dir():
+            try:
+                count = sum(1 for _ in entry.iterdir())
+            except Exception:
+                count = 0
+            objects.append(
+                {
+                    "class": "WPDirectory",
+                    "id": f"/{rel}/{name}" if rel else f"/{name}",
+                    "icon": dir_icon_b64,
+                    "title": name,
+                    "objects": int(count),
+                }
+            )
+        elif entry.is_file():
+            objects.append(
+                {
+                    "class": "WPFile",
+                    "id": f"/{rel}/{name}" if rel else f"/{name}",
+                    "icon": file_icon_b64,
+                    "title": name,
+                    "objects": 0,
+                }
+            )
+
+    return {"objects": objects}
 
 
 class JsonLineHandler(socketserver.StreamRequestHandler):
