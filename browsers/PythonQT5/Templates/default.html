@@ -13,9 +13,9 @@
   </head>
   <body>
     <h1>Object Details</h1>
-    <div class="grid">
+    <div class="grid" style="grid-template-columns: 120px 1fr">
       {% for key, value in obj.items() %}
-        <div class="key mono">{{ key }}</div>
+        <div class="key" style="align-self: center">{{ key }}</div>
         <div>
           {% if value is mapping or value is sequence %}
             <pre class="mono">{{ json.dumps(value, ensure_ascii=False, indent=2) }}</pre>
