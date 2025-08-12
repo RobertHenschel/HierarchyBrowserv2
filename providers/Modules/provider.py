@@ -104,14 +104,29 @@ def get_root_objects_payload() -> Dict[str, Any]:
     names = _list_lmod_top_dirs()
     icon_b64 = _encode_icon_to_base64(ICON_PATH)
     objects: List[Dict[str, Any]] = []
+    
+    def _count_module_children(base: Path) -> int:
+        total = 0
+        try:
+            for mf in base.rglob("modulefiles"):
+                if mf.is_dir():
+                    try:
+                        total += sum(1 for e in mf.iterdir() if e.is_dir())
+                    except Exception:
+                        continue
+        except Exception:
+            return 0
+        return total
+
     for name in names:
+        count = _count_module_children(LMOD_ROOT / name)
         objects.append(
             {
                 "class": "WPLmodDependency",
                 "id": f"/{name}",
                 "icon": icon_b64,
                 "title": name,
-                "objects": 0,
+                "objects": int(count),
             }
         )
     return {"objects": objects}
