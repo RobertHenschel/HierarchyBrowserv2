@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import json
 import socketserver
-from typing import Any, Dict, Optional
+import subprocess
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 def _is_get_root_objects(message: Any) -> bool:
@@ -67,8 +70,63 @@ def _extract_object_id(message: Any) -> Optional[str]:
     return None
 
 
+PROVIDER_DIR = Path(__file__).resolve().parent
+ICON_PATH = PROVIDER_DIR / "resources" / "Partition.png"
+
+
+def _encode_icon_to_base64(icon_path: Path) -> Optional[str]:
+    try:
+        with icon_path.open("rb") as f:
+            raw = f.read()
+        return base64.b64encode(raw).decode("ascii")
+    except FileNotFoundError:
+        return None
+
+
+def _get_slurm_partitions() -> List[str]:
+    # Prefer scontrol for structured output
+    try:
+        out = subprocess.check_output(["scontrol", "show", "partition", "-o"], text=True)
+        names: List[str] = []
+        for line in out.splitlines():
+            line = line.strip()
+            for token in line.split():
+                if token.startswith("PartitionName="):
+                    names.append(token.split("=", 1)[1])
+                    break
+        if names:
+            return sorted(set(names))
+    except Exception:
+        pass
+
+    # Fallback to sinfo
+    try:
+        out = subprocess.check_output(["sinfo", "-h", "-o", "%P"], text=True)
+        names = []
+        for line in out.splitlines():
+            name = line.strip().rstrip("*")
+            if name:
+                names.append(name)
+        return sorted(set(names))
+    except Exception:
+        return []
+
+
 def get_root_objects_payload() -> Dict[str, Any]:
-    return {"objects": []}
+    partitions = _get_slurm_partitions()
+    icon_b64 = _encode_icon_to_base64(ICON_PATH)
+    objects: List[Dict[str, Any]] = []
+    for part in partitions:
+        objects.append(
+            {
+                "class": "WPSlurmPartition",
+                "id": f"/{part}",
+                "icon": icon_b64,
+                "title": part,
+                "objects": 0,
+            }
+        )
+    return {"objects": objects}
 
 
 def get_objects_for_path(_path_str: str) -> Dict[str, Any]:
