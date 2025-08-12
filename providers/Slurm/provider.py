@@ -118,13 +118,17 @@ def get_root_objects_payload() -> Dict[str, Any]:
     icon_b64 = _encode_icon_to_base64(PARTITION_ICON_PATH)
     objects: List[Dict[str, Any]] = []
     for part in partitions:
+        try:
+            job_count = len(_get_jobs_for_partition(part))
+        except Exception:
+            job_count = 0
         objects.append(
             {
                 "class": "WPSlurmPartition",
                 "id": f"/{part}",
                 "icon": icon_b64,
                 "title": part,
-                "objects": 0,
+                "objects": int(job_count),
             }
         )
     return {"objects": objects}
