@@ -1,0 +1,15 @@
+{
+    "class": "WPHomeDirectory",
+    "id": "/ComputeSystems/Quartz/HomeDirectory",
+    "icon": "./Resources/Home.png",
+    "title": "Home Directory",
+    "description": "Your home directory on Quartz.",
+    "contextmenu": [
+        {
+            "title": "Open Directory Browser",
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8891
+        }
+    ]
+}
