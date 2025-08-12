@@ -383,11 +383,14 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
         if open_action is None and objects_count == 0:
             return
+        # Determine remote id: if switching endpoints, start at root "/"
+        switching = (next_host != self.current_host) or (next_port != self.current_port)
+        remote_id = "/" if switching else object_id
         # Push into stack and navigate using next endpoint
-        self.nav_stack.append({"id": object_id, "title": title, "host": next_host, "port": str(next_port)})
+        self.nav_stack.append({"id": object_id, "title": title, "host": next_host, "port": str(next_port), "remote_id": remote_id})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         self.current_host, self.current_port = next_host, next_port
-        self.load_children(object_id, next_host, next_port)
+        self.load_children(remote_id, next_host, next_port)
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()
@@ -420,6 +423,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.nav_stack = self.nav_stack[: depth]
         target = self.nav_stack[depth - 1]
         target_id = target["id"]
+        target_remote_id = target.get("remote_id") or target_id
         target_host = target.get("host") or self.root_host
         try:
             target_port = int(target.get("port")) if target.get("port") is not None else self.root_port
@@ -427,7 +431,7 @@ class MainWindow(QtWidgets.QMainWindow):
             target_port = self.root_port
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         self.current_host, self.current_port = target_host, target_port
-        self.load_children(target_id, target_host, target_port)
+        self.load_children(target_remote_id, target_host, target_port)
 
 
 def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:

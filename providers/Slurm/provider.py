@@ -146,6 +146,9 @@ def _get_jobs_for_partition(partition: str) -> List[str]:
 
 
 def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    # Treat root requests as a request for partitions
+    if path_str.strip() == "/" or path_str.strip() == "":
+        return get_root_objects_payload()
     part = path_str.lstrip("/")
     job_ids = _get_jobs_for_partition(part)
     icon_b64 = _encode_icon_to_base64(JOB_ICON_PATH)
