@@ -109,5 +109,8 @@ Objects may define a `contextmenu` array with entries of these forms:
 | WPSlurmJob          | `/<partition>/<job_id>`     | `<job_id>`            | base64 PNG (Job.png)       | 0                                      | Slurm provider (dynamic)             |
 | WPLmod              |                             |                       | base64 PNG (Box.png)       |                                        | ResearchComputingAtIU                |
 | WPLmodDependency    |                             |                       | base64 PNG (Box.png)       |                                        | ResearchComputingAtIU                |
+| WPLmodSoftware      |                             |                       | base64 PNG (Software.png)  | 0                                      | ResearchComputingAtIU                |
+| WPDirectory         |                             |                       | base64 PNG (Directory.png) |                                        | HomeDirectory                        |
+| WPFile              |                             |                       | base64 PNG (File.png)      | 0                                      | HomeDirectory                        |
 
 
