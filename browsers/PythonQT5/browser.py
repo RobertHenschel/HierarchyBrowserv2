@@ -9,6 +9,13 @@ from typing import Any, Dict, List, Optional
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal
 
+# Import breadcrumb bar from separate module
+try:
+    from .breadcrumbs import BreadcrumbBar  # type: ignore[import-not-found]
+except Exception:
+    # Fallback for direct script execution
+    from breadcrumbs import BreadcrumbBar  # type: ignore[no-redef]
+
 # Support running both as a module and as a standalone script
 try:
     from .details_panel import DetailsPanel  # type: ignore[import-not-found]
@@ -243,53 +250,6 @@ class ObjectItemWidget(QtWidgets.QWidget):
         execute_context_action(self, entry, pos)
 
 
-class BreadcrumbBar(QtWidgets.QWidget):
-    crumbClicked = pyqtSignal(int)
-    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(6)
-        self._container = QtWidgets.QWidget(self)
-        self._h = QtWidgets.QHBoxLayout(self._container)
-        self._h.setContentsMargins(0, 0, 0, 0)
-        self._h.setSpacing(6)
-        layout.addWidget(self._container)
-        # Visual hint like a very flat toolbar
-        self.setAutoFillBackground(True)
-        pal = self.palette()
-        pal.setColor(self.backgroundRole(), pal.window().color().lighter(102))
-        self.setPalette(pal)
-        self.setFixedHeight(28)
-
-    def set_path(self, parts: List[str]) -> None:
-        # Clear
-        while self._h.count():
-            item = self._h.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-        # Build new crumbs
-        for idx, part in enumerate(parts):
-            label = QtWidgets.QLabel(part, self)
-            font = label.font()
-            font.setBold(idx == 0)
-            label.setFont(font)
-            label.setCursor(QtCore.Qt.PointingHandCursor)
-            # Capture index for click
-            def handler(i: int) -> None:
-                self.crumbClicked.emit(i)
-            label.mousePressEvent = (lambda e, i=idx: handler(i))  # type: ignore[assignment]
-            self._h.addWidget(label)
-            if idx != len(parts) - 1:
-                sep = QtWidgets.QLabel("›", self)
-                self._h.addWidget(sep)
-        self._h.addStretch(1)
-
-
-
-
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -309,6 +269,9 @@ class MainWindow(QtWidgets.QMainWindow):
         left_layout.addWidget(self.breadcrumb)
 
         self.nav_stack: List[Dict[str, str]] = []
+        # Persist the endpoint used to load data for this window
+        self.root_host: str = PROVIDER_HOST
+        self.root_port: int = PROVIDER_PORT
         self.selected_item: ObjectItemWidget | None = None
 
         scroll = QtWidgets.QScrollArea(left_panel)
@@ -342,7 +305,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.breadcrumb.set_path([self.root_name])
 
         self.grid_layout = grid_layout
-        self.load_root()
+        self.load_root(self.root_host, self.root_port)
 
     def clear_grid(self) -> None:
         # Reset selection because existing widgets will be deleted
@@ -368,18 +331,18 @@ class MainWindow(QtWidgets.QMainWindow):
                 col = 0
                 row += 1
 
-    def load_root(self) -> None:
+    def load_root(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
         objects = []
         try:
-            objects = fetch_root_objects()
+            objects = fetch_root_objects(host, port)
         except Exception:
             objects = []
         self.populate_objects(objects)
 
-    def load_children(self, object_id: str) -> None:
+    def load_children(self, object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> None:
         data: Dict[str, Any] = {}
         try:
-            data = fetch_objects_for_id(object_id)
+            data = fetch_objects_for_id(object_id, host, port)
         except Exception:
             data = {}
         objects = data.get("objects", []) if isinstance(data, dict) else []
@@ -391,9 +354,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if not isinstance(object_id, str) or not isinstance(title, str):
             return
         # Push into stack and navigate
-        self.nav_stack.append({"id": object_id, "title": title})
+        self.nav_stack.append({"id": object_id, "title": title, "host": self.root_host, "port": str(self.root_port)})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
-        self.load_children(object_id)
+        self.load_children(object_id, self.root_host, self.root_port)
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()
@@ -417,15 +380,21 @@ class MainWindow(QtWidgets.QMainWindow):
         if index <= 0:
             self.nav_stack = []
             self.breadcrumb.set_path([self.root_name])
-            self.load_root()
+            self.load_root(self.root_host, self.root_port)
             return
         # Navigate to a depth
         depth = index  # since root occupies 0
         if depth - 1 < len(self.nav_stack):
             self.nav_stack = self.nav_stack[: depth]
-        target_id = self.nav_stack[depth - 1]["id"]
+        target = self.nav_stack[depth - 1]
+        target_id = target["id"]
+        target_host = target.get("host") or self.root_host
+        try:
+            target_port = int(target.get("port")) if target.get("port") is not None else self.root_port
+        except Exception:
+            target_port = self.root_port
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
-        self.load_children(target_id)
+        self.load_children(target_id, target_host, target_port)
 
 
 def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
