@@ -71,7 +71,8 @@ def _extract_object_id(message: Any) -> Optional[str]:
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
-ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
+PARTITION_ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
+JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job.png"
 
 
 def _encode_icon_to_base64(icon_path: Path) -> Optional[str]:
@@ -114,7 +115,7 @@ def _get_slurm_partitions() -> List[str]:
 
 def get_root_objects_payload() -> Dict[str, Any]:
     partitions = _get_slurm_partitions()
-    icon_b64 = _encode_icon_to_base64(ICON_PATH)
+    icon_b64 = _encode_icon_to_base64(PARTITION_ICON_PATH)
     objects: List[Dict[str, Any]] = []
     for part in partitions:
         objects.append(
@@ -129,8 +130,33 @@ def get_root_objects_payload() -> Dict[str, Any]:
     return {"objects": objects}
 
 
-def get_objects_for_path(_path_str: str) -> Dict[str, Any]:
-    return {"objects": []}
+def _get_jobs_for_partition(partition: str) -> List[str]:
+    part = partition.lstrip("/")
+    # Try squeue first for job IDs in this partition
+    try:
+        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i"], text=True)
+        jobs = [line.strip() for line in out.splitlines() if line.strip()]
+        return jobs
+    except Exception:
+        return []
+
+
+def get_objects_for_path(path_str: str) -> Dict[str, Any]:
+    part = path_str.lstrip("/")
+    job_ids = _get_jobs_for_partition(part)
+    icon_b64 = _encode_icon_to_base64(JOB_ICON_PATH)
+    objects: List[Dict[str, Any]] = []
+    for jid in job_ids:
+        objects.append(
+            {
+                "class": "WPSlurmJob",
+                "id": f"/{part}/{jid}",
+                "icon": icon_b64,
+                "title": jid,
+                "objects": 0,
+            }
+        )
+    return {"objects": objects}
 
 
 class JsonLineHandler(socketserver.StreamRequestHandler):
