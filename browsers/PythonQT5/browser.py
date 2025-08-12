@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import base64
+import argparse
 import json
 import socket
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal
@@ -31,10 +32,12 @@ ICON_BOX_PX = 64
 ICON_IMAGE_PX = 48
 
 
-def fetch_root_objects(host: str = PROVIDER_HOST, port: int = PROVIDER_PORT) -> List[Dict[str, Any]]:
+def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -> List[Dict[str, Any]]:
+    h = host or PROVIDER_HOST
+    p = port or PROVIDER_PORT
     payload = {"method": "GetRootObjects"}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
-    with socket.create_connection((host, port), timeout=3) as s:
+    with socket.create_connection((h, p), timeout=3) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
@@ -48,10 +51,12 @@ def fetch_root_objects(host: str = PROVIDER_HOST, port: int = PROVIDER_PORT) -> 
     return data.get("objects", [])
 
 
-def fetch_info(host: str = PROVIDER_HOST, port: int = PROVIDER_PORT) -> Dict[str, Any]:
+def fetch_info(host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
+    h = host or PROVIDER_HOST
+    p = port or PROVIDER_PORT
     payload = {"method": "GetInfo"}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
-    with socket.create_connection((host, port), timeout=3) as s:
+    with socket.create_connection((h, p), timeout=3) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
@@ -423,10 +428,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.load_children(target_id)
 
 
-def fetch_objects_for_id(object_id: str) -> Dict[str, Any]:
+def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
+    h = host or PROVIDER_HOST
+    p = port or PROVIDER_PORT
     payload = {"method": "GetObjects", "id": object_id}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
-    with socket.create_connection((PROVIDER_HOST, PROVIDER_PORT), timeout=3) as s:
+    with socket.create_connection((h, p), timeout=3) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
@@ -441,7 +448,15 @@ def fetch_objects_for_id(object_id: str) -> Dict[str, Any]:
 
 
 def main() -> None:
-    app = QtWidgets.QApplication(sys.argv)
+    global PROVIDER_HOST, PROVIDER_PORT
+    parser = argparse.ArgumentParser(description="Hierarchy Browser (Qt5)")
+    parser.add_argument("--host", default=PROVIDER_HOST, help="Provider host (default: 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=PROVIDER_PORT, help="Provider port (default: 8888)")
+    args, unknown = parser.parse_known_args()
+    PROVIDER_HOST = args.host
+    PROVIDER_PORT = args.port
+
+    app = QtWidgets.QApplication([sys.argv[0]] + unknown)
     win = MainWindow()
     win.show()
     sys.exit(app.exec_())
