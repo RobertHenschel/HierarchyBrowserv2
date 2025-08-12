@@ -204,12 +204,8 @@ class ObjectItemWidget(QtWidgets.QWidget):
         self.setStyleSheet("border: 1px solid transparent; border-radius: 6px;")
 
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
-        try:
-            objects_count = int(self._obj.get("objects", 0))
-        except Exception:
-            objects_count = 0
-        if objects_count > 0:
-            self.activated.emit(self._obj)
+
+        self.activated.emit(self._obj)
         super().mouseDoubleClickEvent(event)
 
     def set_selected(self, selected: bool) -> None:
@@ -272,6 +268,8 @@ class MainWindow(QtWidgets.QMainWindow):
         # Persist the endpoint used to load data for this window
         self.root_host: str = PROVIDER_HOST
         self.root_port: int = PROVIDER_PORT
+        self.current_host: str = self.root_host
+        self.current_port: int = self.root_port
         self.selected_item: ObjectItemWidget | None = None
 
         scroll = QtWidgets.QScrollArea(left_panel)
@@ -338,6 +336,10 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             objects = []
         self.populate_objects(objects)
+        if host is not None:
+            self.current_host = host
+        if port is not None:
+            self.current_port = port
 
     def load_children(self, object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> None:
         data: Dict[str, Any] = {}
@@ -349,14 +351,43 @@ class MainWindow(QtWidgets.QMainWindow):
         self.populate_objects(objects)
 
     def on_item_activated(self, obj: Dict[str, Any]) -> None:
+        try:
+            objects_count = int(obj.get("objects", 0))
+        except Exception:
+            objects_count = 0
         object_id = obj.get("id")
         title = obj.get("title")
         if not isinstance(object_id, str) or not isinstance(title, str):
             return
-        # Push into stack and navigate
-        self.nav_stack.append({"id": object_id, "title": title, "host": self.root_host, "port": str(self.root_port)})
+        # Determine next endpoint from optional openaction
+        next_host: str = self.current_host
+        next_port: int = self.current_port
+        open_action = None
+        try:
+            open_action = obj.get("openaction")
+            if isinstance(open_action, list) and open_action:
+                for entry in open_action:
+                    if not isinstance(entry, dict):
+                        continue
+                    act = str(entry.get("action", "")).lower()
+                    if act == "objectbrowser":
+                        candidate_host = entry.get("hostname") or entry.get("host")
+                        if isinstance(candidate_host, str) and candidate_host:
+                            next_host = candidate_host
+                        try:
+                            next_port = int(entry.get("port")) if entry.get("port") is not None else next_port
+                        except Exception:
+                            pass
+                        break
+        except Exception:
+            pass
+        if open_action is None and objects_count == 0:
+            return
+        # Push into stack and navigate using next endpoint
+        self.nav_stack.append({"id": object_id, "title": title, "host": next_host, "port": str(next_port)})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
-        self.load_children(object_id, self.root_host, self.root_port)
+        self.current_host, self.current_port = next_host, next_port
+        self.load_children(object_id, next_host, next_port)
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()
@@ -380,6 +411,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if index <= 0:
             self.nav_stack = []
             self.breadcrumb.set_path([self.root_name])
+            self.current_host, self.current_port = self.root_host, self.root_port
             self.load_root(self.root_host, self.root_port)
             return
         # Navigate to a depth
@@ -394,6 +426,7 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             target_port = self.root_port
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        self.current_host, self.current_port = target_host, target_port
         self.load_children(target_id, target_host, target_port)
 
 
