@@ -1,0 +1,16 @@
+{
+    "class": "WPLmod",
+    "id": "/ComputeSystems/Quartz/SoftwarePackages",
+    "icon": "./Resources/Box.png",
+    "title": "Software Packages",
+    "description": "Software packages available on Quartz.",
+    "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023802",
+    "contextmenu": [
+        {
+            "title": "Open Software Browser",
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8890
+        }
+    ]
+}

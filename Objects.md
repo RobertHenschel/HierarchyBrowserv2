@@ -107,5 +107,7 @@ Objects may define a `contextmenu` array with entries of these forms:
 | WPSlurmBatchSystem  | `/…/SlurmBatchSystem`       | free text             | base64 PNG (Slurm.png)     | provider-computed (typically 0)        | ResearchComputingAtIU (authored)     |
 | WPSlurmPartition    | `/<partition>`              | `<partition>`         | base64 PNG (Partition.png) | number of jobs in partition            | Slurm provider (dynamic)             |
 | WPSlurmJob          | `/<partition>/<job_id>`     | `<job_id>`            | base64 PNG (Job.png)       | 0                                      | Slurm provider (dynamic)             |
+| WPLmod              |                             |                       | base64 PNG (Box.png)       |                                        | ResearchComputingAtIU                |
+| WPLmodDependency    |                             |                       | base64 PNG (Box.png)       |                                        | ResearchComputingAtIU                |
 
 
