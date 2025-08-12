@@ -73,6 +73,7 @@ PROVIDER_DIR = Path(__file__).resolve().parent
 # The instruction references "./resources/Box.png". Use a conventional
 # Resources directory as in other providers; either works when authored.
 ICON_PATH = PROVIDER_DIR / "Resources" / "Box.png"
+SOFTWARE_ICON_PATH = PROVIDER_DIR / "Resources" / "Software.png"
 
 # Base directory that Lmod module families are stored under
 LMOD_ROOT = Path("/N/soft/rhel8/modules/quartz")
@@ -137,6 +138,7 @@ def get_objects_for_path(path_str: str) -> Dict[str, Any]:
     base = (LMOD_ROOT / rel)
     objects: List[Dict[str, Any]] = []
     icon_b64 = _encode_icon_to_base64(ICON_PATH)
+    icon_sw_b64 = _encode_icon_to_base64(SOFTWARE_ICON_PATH)
     try:
         if base.exists() and base.is_dir():
             for entry in sorted(base.iterdir()):
@@ -155,6 +157,25 @@ def get_objects_for_path(path_str: str) -> Dict[str, Any]:
                         "objects": int(count),
                     }
                 )
+
+            # Also expose software entries under immediate "modulefiles" directories
+            for mf in [p for p in base.iterdir() if p.is_dir() and p.name == "modulefiles"]:
+                try:
+                    for sw in sorted(mf.iterdir()):
+                        if not sw.is_dir():
+                            continue
+                        sw_id = f"/{rel}/{sw.name}" if rel else f"/{sw.name}"
+                        objects.append(
+                            {
+                                "class": "WPLmodSoftware",
+                                "id": sw_id,
+                                "icon": icon_sw_b64,
+                                "title": sw.name,
+                                "objects": 0,
+                            }
+                        )
+                except Exception:
+                    continue
     except Exception:
         pass
     return {"objects": objects}
