@@ -84,6 +84,7 @@ class SlurmProvider(ObjectProvider):
                     "id": f"/{part}/{jid}",
                     "icon": icon_name,
                     "title": jid,
+                    "jobarray": ("_" in jid),
                     "objects": 0,
                 }
             )
