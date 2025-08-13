@@ -92,42 +92,14 @@ class SlurmProvider(ObjectProvider):
         if m:
             base, command, prop_name = m.groups()
             if command == "GroupBy":
-                job_user_pairs = _get_jobs_and_users_for_partition(base)
-                # Create objects of type WPSlurmJob from the return of job_user_pairs
-                objects: List[Dict[str, object]] = []
-                icon_name = f"./resources/{JOB_ICON_PATH.name}"
-                for jid, user in job_user_pairs:
-                    obj = WPSlurmJob(
-                        id=f"/{base}/{jid}",
-                        title=jid,
-                        icon=icon_name,
-                        objects=0,
-                        jobarray=("_" in jid),
-                        userid=user,
-                    )
-                    objects.append(obj.to_dict())
-                # Now check if the property extracted as "p" is a valid property of the WPSlurmJob object and if so use it to group the jobs
-                if prop_name in WPSlurmJob.__dataclass_fields__:
-                    # Count occurrences of each property value across the dict objects
-                    value_counts: Dict[object, int] = {}
-                    for o in objects:
-                        try:
-                            val = o.get(prop_name)  # type: ignore[arg-type]
-                        except Exception:
-                            val = None
-                        if val is None:
-                            continue
-                        value_counts[val] = value_counts.get(val, 0) + 1
-                    grouped_objects: List[Dict[str, object]] = []
-                    for value, count in value_counts.items():
-                        grp = WPSlurmJobGroup(
-                            id=f"/{base}/{value}",
-                            title=str(value),
-                            icon=icon_name,
-                            objects=int(count),
-                        )
-                        grouped_objects.append(grp.to_dict())
-                    return {"objects": grouped_objects}
+                return _handle_group_by(base, prop_name)
+        # Match e.g. "hopper/<Show:userid:value>"
+        m = re.match(r"^(.*)/<([^:>]+):([^>]+):([^>]+)>$", part)
+        prop_name = None
+        if m:
+            base, command, prop_name, prop_value = m.groups()
+            if command == "Show":
+                return _handle_show(base, prop_name, prop_value)
 
         job_user_pairs = _get_jobs_and_users_for_partition(part)
         icon_name = f"./resources/{JOB_ICON_PATH.name}"
@@ -144,8 +116,77 @@ class SlurmProvider(ObjectProvider):
             objects.append(obj.to_dict())
         return {"objects": objects}
 
+def _handle_show(base: str, prop_name: str, prop_value: str) -> Dict[str, List[Dict]]:
+    print(f"Base: {base}, Prop Name: {prop_name}, Prop Value: {prop_value}")
+    try:
+        job_user_pairs = _get_jobs_and_users_for_partition(base)
+        # Create objects of type WPSlurmJob from the return of job_user_pairs
+        objects: List[Dict[str, object]] = []
+        icon_name = f"./resources/{JOB_ICON_PATH.name}"
+        for jid, user in job_user_pairs:
+            obj = WPSlurmJob(
+                id=f"/{base}/{jid}",
+                title=jid,
+                icon=icon_name,
+                objects=0,
+                jobarray=("_" in jid),
+                userid=user,
+            )
+            objects.append(obj.to_dict())
+        # Now check if the property extracted as "p" is a valid property of the WPSlurmJob object and if so use it to group the jobs
+        if prop_name in WPSlurmJob.__dataclass_fields__:
+            # Count occurrences of each property value across the dict objects
+            grouped_objects: List[Dict[str, object]] = []
+            for o in objects:
+                try:
+                    val = o.get(prop_name)  # type: ignore[arg-type]
+                except Exception:
+                    val = None
+                if val is None:
+                    continue
+                if str(val) == prop_value:
+                    grouped_objects.append(o)
+    except Exception as e:
+        print(e)
+    return {"objects": grouped_objects}
 
-
+def _handle_group_by(base: str, prop_name: str) -> Dict[str, List[Dict]]:
+    job_user_pairs = _get_jobs_and_users_for_partition(base)
+    # Create objects of type WPSlurmJob from the return of job_user_pairs
+    objects: List[Dict[str, object]] = []
+    icon_name = f"./resources/{JOB_ICON_PATH.name}"
+    for jid, user in job_user_pairs:
+        obj = WPSlurmJob(
+            id=f"/{base}/{jid}",
+            title=jid,
+            icon=icon_name,
+            objects=0,
+            jobarray=("_" in jid),
+            userid=user,
+        )
+        objects.append(obj.to_dict())
+    # Now check if the property extracted as "p" is a valid property of the WPSlurmJob object and if so use it to group the jobs
+    if prop_name in WPSlurmJob.__dataclass_fields__:
+        # Count occurrences of each property value across the dict objects
+        value_counts: Dict[object, int] = {}
+        for o in objects:
+            try:
+                val = o.get(prop_name)  # type: ignore[arg-type]
+            except Exception:
+                val = None
+            if val is None:
+                continue
+            value_counts[val] = value_counts.get(val, 0) + 1
+        grouped_objects: List[Dict[str, object]] = []
+        for value, count in value_counts.items():
+            grp = WPSlurmJobGroup(
+                id=f"/{base}/<Show:{prop_name}:{value}>",
+                title=str(value),
+                icon=icon_name,
+                objects=int(count),
+            )
+            grouped_objects.append(grp.to_dict())
+        return {"objects": grouped_objects}
 
 
 def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str]]:
