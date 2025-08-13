@@ -39,10 +39,3 @@ class WPSlurmJob(ProviderObject):
         return extra
 
 
-@dataclass
-class WPSlurmJobGroup(ProviderObject):
-    @property
-    def class_name(self) -> str:  # noqa: D401
-        return "WPGroup"
-
-
