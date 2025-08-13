@@ -85,34 +85,16 @@ class SlurmProvider(ObjectProvider):
                 job_user_pairs = _get_jobs_and_users_for_partition(base)
                 icon_name = f"./resources/{JOB_ICON_PATH.name}"
                 objects: List[Dict[str, object]] = []
-                # Count jobs per user
-                
                 user_counts = Counter(user for _, user in job_user_pairs)
                 for user in user_counts:
-                    if user_counts[user] == 1:
-                        # Get the jobid for this user (the only job for this user)
-                        jid = next(j for j, u in job_user_pairs if u == user)
-                        objects.append(
-                            {
-                                "class": "WPSlurmJob",
-                                "id": f"/{base}/{jid}",
-                                "icon": icon_name,
-                                "title": jid,
-                                "jobarray": ("_" in jid),
-                                "userid": user,
-                                "objects": 0,
-                            }
-                        )
-                    else:
-                        objects.append(
-                            {
-                                "class": "WPSlurmJobGroup",
-                                "id": f"/{part}/{user}",
-                                "icon": icon_name,
-                                "title": user,
-                                "objects": user_counts[user],
-                            }
-                        )
+                    objects.append(
+                        {
+                            "class": "WPSlurmJobGroup",
+                            "id": f"/{part}/{user}",
+                            "icon": icon_name,
+                            "title": user,
+                            "objects": user_counts[user],
+                        })
                 return {"objects": objects}
 
 
