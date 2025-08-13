@@ -3,6 +3,8 @@ import argparse
 import sys
 from pathlib import Path
 from typing import Dict, List
+import pwd
+import grp
 
 # Allow running this file directly: add project root to sys.path
 _THIS = Path(__file__).resolve()
@@ -55,11 +57,21 @@ class HomeDirectoryProvider(ObjectProvider):
                 )
                 objects.append(obj.to_dict())
             elif entry.is_file():
+                owner_name = None
+                group_name = None
+                try:
+                    st = entry.stat()
+                    owner_name = pwd.getpwuid(st.st_uid).pw_name
+                    group_name = grp.getgrgid(st.st_gid).gr_name
+                except Exception:
+                    pass
                 obj = WPFile(
                     id=f"/{name}",
                     title=name,
                     icon=file_icon_name,
                     objects=0,
+                    owner=owner_name,
+                    group=group_name,
                 )
                 objects.append(obj.to_dict())
 
@@ -104,11 +116,21 @@ class HomeDirectoryProvider(ObjectProvider):
                 )
                 objects.append(obj.to_dict())
             elif entry.is_file():
+                owner_name = None
+                group_name = None
+                try:
+                    st = entry.stat()
+                    owner_name = pwd.getpwuid(st.st_uid).pw_name
+                    group_name = grp.getgrgid(st.st_gid).gr_name
+                except Exception:
+                    pass
                 obj = WPFile(
                     id=f"/{rel}/{name}" if rel else f"/{name}",
                     title=name,
                     icon=file_icon_name,
                     objects=0,
+                    owner=owner_name,
+                    group=group_name,
                 )
                 objects.append(obj.to_dict())
 

@@ -658,6 +658,8 @@ def _to_typed_objects(raw_objects: List[Dict[str, Any]]) -> List[Any]:
                     title=str(obj.get("title", "")),
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
+                    owner=obj.get("owner"),
+                    group=obj.get("group"),
                 )
                 typed.append(inst)
             elif cls_name == "WPLmodDependency" and WPLmodDependency is not None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from providers.base import ProviderObject
 
@@ -17,5 +18,17 @@ class WPFile(ProviderObject):
     @property
     def class_name(self) -> str:  # noqa: D401
         return "WPFile"
+
+    # Optional ownership metadata
+    owner: Optional[str] = None
+    group: Optional[str] = None
+
+    def _extra_fields(self) -> dict[str, object]:
+        extra: dict[str, object] = {}
+        if self.owner is not None:
+            extra["owner"] = self.owner
+        if self.group is not None:
+            extra["group"] = self.group
+        return extra
 
 
