@@ -104,7 +104,7 @@ class SlurmProvider(ObjectProvider):
         job_user_pairs = _get_jobs_and_users_for_partition(part)
         icon_name = f"./resources/{JOB_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
-        for jid, user in job_user_pairs:
+        for jid, user, nodes in job_user_pairs:
             obj = WPSlurmJob(
                 id=f"/{part}/{jid}",
                 title=jid,
@@ -112,6 +112,7 @@ class SlurmProvider(ObjectProvider):
                 objects=0,
                 jobarray=("_" in jid),
                 userid=user,
+                nodecount=int(nodes),
             )
             objects.append(obj.to_dict())
         return {"objects": objects}
@@ -123,7 +124,7 @@ def _handle_show(base: str, prop_name: str, prop_value: str) -> Dict[str, List[D
         # Create objects of type WPSlurmJob from the return of job_user_pairs
         objects: List[Dict[str, object]] = []
         icon_name = f"./resources/{JOB_ICON_PATH.name}"
-        for jid, user in job_user_pairs:
+        for jid, user, nodes in job_user_pairs:
             obj = WPSlurmJob(
                 id=f"/{base}/{jid}",
                 title=jid,
@@ -131,6 +132,7 @@ def _handle_show(base: str, prop_name: str, prop_value: str) -> Dict[str, List[D
                 objects=0,
                 jobarray=("_" in jid),
                 userid=user,
+                nodecount=int(nodes),
             )
             objects.append(obj.to_dict())
         # Now check if the property extracted as "p" is a valid property of the WPSlurmJob object and if so use it to group the jobs
@@ -155,7 +157,7 @@ def _handle_group_by(base: str, prop_name: str) -> Dict[str, List[Dict]]:
     # Create objects of type WPSlurmJob from the return of job_user_pairs
     objects: List[Dict[str, object]] = []
     icon_name = f"./resources/{JOB_ICON_PATH.name}"
-    for jid, user in job_user_pairs:
+    for jid, user, nodes in job_user_pairs:
         obj = WPSlurmJob(
             id=f"/{base}/{jid}",
             title=jid,
@@ -163,6 +165,7 @@ def _handle_group_by(base: str, prop_name: str) -> Dict[str, List[Dict]]:
             objects=0,
             jobarray=("_" in jid),
             userid=user,
+            nodecount=int(nodes),
         )
         objects.append(obj.to_dict())
     # Now check if the property extracted as "p" is a valid property of the WPSlurmJob object and if so use it to group the jobs
@@ -189,24 +192,31 @@ def _handle_group_by(base: str, prop_name: str) -> Dict[str, List[Dict]]:
         return {"objects": grouped_objects}
 
 
-def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str]]:
-    """Return list of (jobid, userid) for jobs in the given partition.
+def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str, int]]:
+    """Return list of (jobid, userid, nodecount) for jobs in the given partition.
 
-    Uses a single squeue call to retrieve both fields for efficiency.
+    Uses a single squeue call to retrieve all fields for efficiency.
     """
     part = partition.lstrip("/")
     try:
-        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u"], text=True)
-        pairs: List[Tuple[str, str]] = []
+        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u|%D"], text=True)
+        pairs: List[Tuple[str, str, int]] = []
         for line in out.splitlines():
             entry = line.strip()
             if not entry:
                 continue
-            jid, sep, user = entry.partition("|")
-            jid = jid.strip()
-            user = user.strip() if sep else ""
+            # Split exactly into 3 parts: jobid | user | nodecount
+            parts = entry.split("|", 2)
+            if len(parts) != 3:
+                continue
+            jid = parts[0].strip()
+            user = parts[1].strip()
+            try:
+                nodes = int(parts[2].strip())
+            except Exception:
+                nodes = 0
             if jid:
-                pairs.append((jid, user))
+                pairs.append((jid, user, nodes))
         return pairs
     except Exception:
         return []

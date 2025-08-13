@@ -21,6 +21,7 @@ class WPSlurmJob(ProviderObject):
 
     jobarray: bool = False
     userid: Optional[str] = None
+    nodecount: int = 0
 
     @property
     def class_name(self) -> str:  # noqa: D401
@@ -31,6 +32,7 @@ class WPSlurmJob(ProviderObject):
         extra["jobarray"] = bool(self.jobarray)
         if self.userid is not None:
             extra["userid"] = self.userid
+        extra["nodecount"] = int(self.nodecount)
         return extra
 
 
