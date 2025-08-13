@@ -49,11 +49,21 @@ class HomeDirectoryProvider(ObjectProvider):
                     count = sum(1 for _ in entry.iterdir())
                 except Exception:
                     count = 0
+                dir_owner = None
+                dir_group = None
+                try:
+                    st = entry.stat()
+                    dir_owner = pwd.getpwuid(st.st_uid).pw_name
+                    dir_group = grp.getgrgid(st.st_gid).gr_name
+                except Exception:
+                    pass
                 obj = WPDirectory(
                     id=f"/{name}",
                     title=name,
                     icon=dir_icon_name,
                     objects=int(count),
+                    owner=dir_owner,
+                    group=dir_group,
                 )
                 objects.append(obj.to_dict())
             elif entry.is_file():
@@ -106,12 +116,22 @@ class HomeDirectoryProvider(ObjectProvider):
                         count = sum(1 for _ in entry.iterdir())
                     except Exception:
                         count = 0
+                    d_owner = None
+                    d_group = None
+                    try:
+                        st = entry.stat()
+                        d_owner = pwd.getpwuid(st.st_uid).pw_name
+                        d_group = grp.getgrgid(st.st_gid).gr_name
+                    except Exception:
+                        pass
                     typed.append(
                         WPDirectory(
                             id=f"/{rel}/{name}" if rel else f"/{name}",
                             title=name,
                             icon=dir_icon_name,
                             objects=int(count),
+                            owner=d_owner,
+                            group=d_group,
                         )
                     )
                 elif entry.is_file():
