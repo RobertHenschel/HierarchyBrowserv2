@@ -76,7 +76,7 @@ ICON_BOX_PX = 64
 ICON_IMAGE_PX = 48
 
 
-def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -> List[Dict[str, Any]]:
+def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -> List[Any]:
     h = host or PROVIDER_HOST
     p = port or PROVIDER_PORT
     payload = {"method": "GetRootObjects"}
@@ -93,8 +93,8 @@ def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -
         return []
     data = json.loads(buf.decode("utf-8").strip())
     raw_objects = data.get("objects", [])
-    # Convert to shared typed objects (no behavior change over the wire)
-    return _retyped_objects(raw_objects)
+    # Convert to shared typed objects
+    return _to_typed_objects(raw_objects)
 
 
 def fetch_info(host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
@@ -392,7 +392,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if w:
                 w.deleteLater()
 
-    def populate_objects(self, objects: List[Dict[str, Any]]) -> None:
+    def populate_objects(self, objects: List[Any]) -> None:
         self.clear_grid()
         # Keep a copy of the raw objects currently displayed for toolbar actions
         try:
@@ -403,7 +403,7 @@ class MainWindow(QtWidgets.QMainWindow):
         row = 0
         col = 0
         for obj in objects:
-            widget = ObjectItemWidget(obj, icon_lookup=self.get_icon_pixmap)
+            widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap)
             widget.activated.connect(self.on_item_activated)
             widget.clicked.connect(self.on_item_clicked)
             self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
@@ -524,8 +524,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Collect all properties present in the currently displayed objects
         props: set[str] = set()
         for obj in self.current_objects:
-            if isinstance(obj, dict):
-                for k in obj.keys():
+            as_dict = _obj_to_dict(obj)
+            if isinstance(as_dict, dict):
+                for k in as_dict.keys():
                     if isinstance(k, str):
                         props.add(k)
         # Exclude core fields that shouldn't be used for grouping
@@ -559,7 +560,7 @@ class MainWindow(QtWidgets.QMainWindow):
         sender.set_selected(True)
         self.selected_item = sender
         # Populate details panel with selected object's properties
-        self.details_panel.set_object(obj)
+        self.details_panel.set_object(_obj_to_dict(obj))
 
     def on_breadcrumb_clicked(self, index: int) -> None:
         # index 0 is root
@@ -602,20 +603,14 @@ def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optio
     if not buf:
         return {}
     data = json.loads(buf.decode("utf-8").strip())
-    try:
-        if isinstance(data, dict) and isinstance(data.get("objects"), list):
-            data["objects"] = _retyped_objects(data["objects"])  # type: ignore[index]
-    except Exception:
-        pass
+    if isinstance(data, dict) and isinstance(data.get("objects"), list):
+        data = {"objects": _to_typed_objects(data["objects"]) }
     return data
 
 
-def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Map incoming dicts to shared typed objects, then back to dicts.
-
-    This ensures both provider and browser are aligned on object schema.
-    """
-    typed: List[Dict[str, Any]] = []
+def _to_typed_objects(raw_objects: List[Dict[str, Any]]) -> List[Any]:
+    """Map incoming dicts to shared typed objects and keep them as objects."""
+    typed: List[Any] = []
     for obj in raw_objects:
         if not isinstance(obj, dict):
             continue
@@ -628,7 +623,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPSlurmJob" and WPSlurmJob is not None:
                 inst = WPSlurmJob(
                     id=str(obj.get("id", "")),
@@ -640,7 +635,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     nodecount=int(obj.get("nodecount", 0)),
                     jobstate=obj.get("jobstate"),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPSlurmJobGroup" and WPSlurmJobGroup is not None:
                 inst = WPSlurmJobGroup(
                     id=str(obj.get("id", "")),
@@ -648,7 +643,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPDirectory" and WPDirectory is not None:
                 inst = WPDirectory(
                     id=str(obj.get("id", "")),
@@ -656,7 +651,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPFile" and WPFile is not None:
                 inst = WPFile(
                     id=str(obj.get("id", "")),
@@ -664,7 +659,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPLmodDependency" and WPLmodDependency is not None:
                 inst = WPLmodDependency(
                     id=str(obj.get("id", "")),
@@ -672,7 +667,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPLmodSoftware" and WPLmodSoftware is not None:
                 inst = WPLmodSoftware(
                     id=str(obj.get("id", "")),
@@ -680,9 +675,8 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             elif cls_name == "WPObject" and RCIU_WPObject is not None:
-                # Preserve any extra fields not in the base object
                 extra = {k: v for k, v in obj.items() if k not in {"class", "id", "title", "icon", "objects"}}
                 inst = RCIU_WPObject(
                     id=str(obj.get("id", "")),
@@ -691,13 +685,25 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     objects=int(obj.get("objects", 0)),
                     extra=extra,
                 )
-                typed.append(inst.to_dict())
+                typed.append(inst)
             else:
-                # Unknown class, pass-through
                 typed.append(obj)
         except Exception:
             typed.append(obj)
     return typed
+
+
+def _obj_to_dict(obj: Any) -> Dict[str, Any]:
+    """Convert a typed ProviderObject (or plain dict) to a JSON-friendly dict for UI.
+
+    If the object exposes to_dict(), use it; otherwise return as-is if it's already a dict.
+    """
+    try:
+        if hasattr(obj, "to_dict") and callable(getattr(obj, "to_dict")):
+            return obj.to_dict()  # type: ignore[return-value]
+    except Exception:
+        pass
+    return obj if isinstance(obj, dict) else {}
 
 
 
