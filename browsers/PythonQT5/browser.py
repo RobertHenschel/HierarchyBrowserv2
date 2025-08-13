@@ -5,6 +5,7 @@ import json
 import socket
 import sys
 from typing import Any, Dict, List, Optional, Callable
+from pathlib import Path
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal
@@ -31,6 +32,26 @@ except Exception:
     from context_actions import execute_context_action  # type: ignore[no-redef]
 
 
+# Allow importing shared provider models when running directly
+_THIS = Path(__file__).resolve()
+_PROJECT_ROOT = _THIS.parents[2]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+# Import shared object model (provider and browser share these classes)
+try:
+    from providers.base import ProviderObject  # type: ignore[import-not-found]
+    from providers.Slurm.model import (
+        WPSlurmPartition,
+        WPSlurmJob,
+        WPSlurmJobGroup,
+    )  # type: ignore[import-not-found]
+except Exception:
+    ProviderObject = None  # type: ignore[assignment]
+    WPSlurmPartition = None  # type: ignore[assignment]
+    WPSlurmJob = None  # type: ignore[assignment]
+    WPSlurmJobGroup = None  # type: ignore[assignment]
+
 PROVIDER_HOST = "127.0.0.1"
 PROVIDER_PORT = 8888
 
@@ -55,7 +76,9 @@ def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -
     if not buf:
         return []
     data = json.loads(buf.decode("utf-8").strip())
-    return data.get("objects", [])
+    raw_objects = data.get("objects", [])
+    # Convert to shared typed objects (no behavior change over the wire)
+    return _retyped_objects(raw_objects)
 
 
 def fetch_info(host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
@@ -305,6 +328,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_host: str = self.root_host
         self.current_port: int = self.root_port
         self.selected_item: ObjectItemWidget | None = None
+        self.current_objects: List[Dict[str, Any]] = []
 
         scroll = QtWidgets.QScrollArea(left_panel)
         scroll.setWidgetResizable(True)
@@ -354,6 +378,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def populate_objects(self, objects: List[Dict[str, Any]]) -> None:
         self.clear_grid()
+        # Keep a copy of the raw objects currently displayed for toolbar actions
+        try:
+            self.current_objects = list(objects)
+        except Exception:
+            self.current_objects = []
         columns = 4
         row = 0
         col = 0
@@ -476,9 +505,27 @@ class MainWindow(QtWidgets.QMainWindow):
         return path
 
     def on_group_action_triggered(self) -> None:
+        # Collect all properties present in the currently displayed objects
+        props: set[str] = set()
+        for obj in self.current_objects:
+            if isinstance(obj, dict):
+                for k in obj.keys():
+                    if isinstance(k, str):
+                        props.add(k)
+        # Exclude core fields that shouldn't be used for grouping
+        reserved = {"class", "id", "title", "icon", "objects"}
+        candidates = sorted(p for p in props if p not in reserved)
+        if not candidates:
+            return
+        menu = QtWidgets.QMenu(self)
+        for prop in candidates:
+            action = menu.addAction(prop)
+            action.triggered.connect(lambda _=False, p=prop: self._group_by_property(p))
+        menu.exec_(QtGui.QCursor.pos())
+
+    def _group_by_property(self, prop: str) -> None:
         base_path = self._get_current_path()
-        # Append grouping command using provider-expected token
-        target_path = base_path.rstrip("/") + "/<GroupBy:userid>"
+        target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
         self.load_children(target_path, self.current_host, self.current_port)
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
@@ -538,7 +585,58 @@ def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optio
             buf += chunk
     if not buf:
         return {}
-    return json.loads(buf.decode("utf-8").strip())
+    data = json.loads(buf.decode("utf-8").strip())
+    try:
+        if isinstance(data, dict) and isinstance(data.get("objects"), list):
+            data["objects"] = _retyped_objects(data["objects"])  # type: ignore[index]
+    except Exception:
+        pass
+    return data
+
+
+def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Map incoming dicts to shared typed objects, then back to dicts.
+
+    This ensures both provider and browser are aligned on object schema.
+    """
+    typed: List[Dict[str, Any]] = []
+    for obj in raw_objects:
+        if not isinstance(obj, dict):
+            continue
+        cls_name = obj.get("class")
+        try:
+            if cls_name == "WPSlurmPartition" and WPSlurmPartition is not None:
+                inst = WPSlurmPartition(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPSlurmJob" and WPSlurmJob is not None:
+                inst = WPSlurmJob(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                    jobarray=bool(obj.get("jobarray", False)),
+                    userid=obj.get("userid"),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPSlurmJobGroup" and WPSlurmJobGroup is not None:
+                inst = WPSlurmJobGroup(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            else:
+                # Unknown class, pass-through
+                typed.append(obj)
+        except Exception:
+            typed.append(obj)
+    return typed
 
 
 

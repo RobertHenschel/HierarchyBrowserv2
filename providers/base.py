@@ -187,3 +187,37 @@ class ObjectProvider(ABC):
         return icons
 
 
+
+# ---- Object model for provider responses ----
+@dataclass
+class ProviderObject:
+    """Base strongly-typed object for provider responses.
+
+    Subclasses should override the class_name property and may add extra
+    typed fields. Serialization is controlled via to_dict().
+    """
+
+    id: str
+    title: str
+    icon: Optional[str] = None
+    objects: int = 0
+
+    @property
+    def class_name(self) -> str:
+        return "WPObject"
+
+    def _extra_fields(self) -> dict[str, object]:
+        """Override in subclasses to emit additional fields."""
+        return {}
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "class": self.class_name,
+            "id": self.id,
+            "title": self.title,
+            "icon": self.icon if self.icon is not None else None,
+            "objects": int(self.objects),
+        }
+        payload.update(self._extra_fields())
+        return payload
+
