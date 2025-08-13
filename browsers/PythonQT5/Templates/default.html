@@ -5,20 +5,20 @@
     <style>
       body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 12px; }
       h1 { font-size: 18px; margin: 0 0 8px 0; }
-      .grid { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; }
-      .key { color: #666; }
-      pre { background: #f6f8fa; padding: 8px; border-radius: 6px; }
-      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .grid { display: grid; grid-template-columns: max-content 1fr; gap: 0px 12px; }
+      .key { color: #666; padding-right: 20px; white-space: nowrap; }
+      pre { background: #f6f8fa; margin: 0; padding: 2px 6px; line-height: 1.2; border-radius: 6px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.4; }
     </style>
   </head>
   <body>
     <h1>Object Details</h1>
-    <div class="grid" style="grid-template-columns: 120px 1fr">
+    <div class="grid">
       {% for key, value in obj.items() %}
         <div class="key" style="align-self: center">{{ key }}</div>
         <div>
           {% if value is mapping or value is sequence %}
-            <pre class="mono">{{ json.dumps(value, ensure_ascii=False, indent=2) }}</pre>
+            <span class="mono">{{ json.dumps(value, ensure_ascii=False, indent=2) }}</span>
           {% else %}
             <span class="mono">{{ value }}</span>
           {% endif %}
