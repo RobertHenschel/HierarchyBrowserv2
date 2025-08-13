@@ -90,7 +90,7 @@ class SlurmProvider(ObjectProvider):
                     objects.append(
                         {
                             "class": "WPSlurmJobGroup",
-                            "id": f"/{part}/{user}",
+                            "id": f"/{base}/{user}",
                             "icon": icon_name,
                             "title": user,
                             "objects": user_counts[user],
