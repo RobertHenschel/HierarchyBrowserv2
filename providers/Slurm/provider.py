@@ -3,7 +3,7 @@ import argparse
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 # Allow running this file directly: add project root to sys.path
 _THIS = Path(__file__).resolve()
@@ -56,7 +56,7 @@ class SlurmProvider(ObjectProvider):
         objects: List[Dict[str, object]] = []
         for part in partitions:
             try:
-                job_count = len(_get_jobs_for_partition(part))
+                job_count = len(_get_jobs_and_users_for_partition(part))
             except Exception:
                 job_count = 0
             objects.append(
@@ -74,10 +74,10 @@ class SlurmProvider(ObjectProvider):
         if path_str.strip() == "/" or path_str.strip() == "":
             return self.get_root_objects_payload()
         part = path_str.lstrip("/")
-        job_ids = _get_jobs_for_partition(part)
+        job_user_pairs = _get_jobs_and_users_for_partition(part)
         icon_name = f"./resources/{JOB_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
-        for jid in job_ids:
+        for jid, user in job_user_pairs:
             objects.append(
                 {
                     "class": "WPSlurmJob",
@@ -85,19 +85,35 @@ class SlurmProvider(ObjectProvider):
                     "icon": icon_name,
                     "title": jid,
                     "jobarray": ("_" in jid),
+                    "userid": user,
                     "objects": 0,
                 }
             )
         return {"objects": objects}
 
 
-def _get_jobs_for_partition(partition: str) -> List[str]:
+
+
+
+def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str]]:
+    """Return list of (jobid, userid) for jobs in the given partition.
+
+    Uses a single squeue call to retrieve both fields for efficiency.
+    """
     part = partition.lstrip("/")
-    # Try squeue first for job IDs in this partition
     try:
-        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i"], text=True)
-        jobs = [line.strip() for line in out.splitlines() if line.strip()]
-        return jobs
+        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u"], text=True)
+        pairs: List[Tuple[str, str]] = []
+        for line in out.splitlines():
+            entry = line.strip()
+            if not entry:
+                continue
+            jid, sep, user = entry.partition("|")
+            jid = jid.strip()
+            user = user.strip() if sep else ""
+            if jid:
+                pairs.append((jid, user))
+        return pairs
     except Exception:
         return []
 
