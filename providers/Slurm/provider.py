@@ -111,7 +111,7 @@ class SlurmProvider(ObjectProvider):
             list_for_base,
             allowed_group_fields=allowed,
             group_icon_filename=f"./resources/{JOB_ICON_PATH.name}",
-x``        )
+        )
 
 def _handle_show(base: str, prop_name: str, prop_value: str) -> Dict[str, List[Dict]]:
     # Deprecated: handled by ObjectProvider.build_objects_for_path
