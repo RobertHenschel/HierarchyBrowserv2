@@ -57,6 +57,7 @@ try:
     from providers.ResearchComputingAtIU.model import (
         WPObject as RCIU_WPObject,
     )  # type: ignore[import-not-found]
+    from providers.base import WPGroup  # type: ignore[import-not-found]
 except Exception:
     ProviderObject = None  # type: ignore[assignment]
     WPSlurmPartition = None  # type: ignore[assignment]
@@ -67,6 +68,7 @@ except Exception:
     WPDirectory = None  # type: ignore[assignment]
     WPFile = None  # type: ignore[assignment]
     RCIU_WPObject = None  # type: ignore[assignment]
+    WPGroup = None  # type: ignore[assignment]
 
 PROVIDER_HOST = "127.0.0.1"
 PROVIDER_PORT = 8888
@@ -672,6 +674,14 @@ def _to_typed_objects(raw_objects: List[Dict[str, Any]]) -> List[Any]:
                 typed.append(inst)
             elif cls_name == "WPLmodSoftware" and WPLmodSoftware is not None:
                 inst = WPLmodSoftware(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst)
+            elif cls_name == "WPGroup" and WPGroup is not None:
+                inst = WPGroup(
                     id=str(obj.get("id", "")),
                     title=str(obj.get("title", "")),
                     icon=obj.get("icon"),

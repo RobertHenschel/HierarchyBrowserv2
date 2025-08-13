@@ -7,7 +7,7 @@ import socketserver
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Callable, Iterable
 
 
 @dataclass(frozen=True)
@@ -186,6 +186,42 @@ class ObjectProvider(ABC):
             return []
         return icons
 
+    # ---- Command path processing (optional helpers for subclasses) ----
+    def build_objects_for_path(
+        self,
+        path_str: str,
+        list_for_base: Callable[[str], Iterable["ProviderObject"]],
+        *,
+        allowed_group_fields: set[str] | None = None,
+        group_icon_filename: str = "./resources/Group.png",
+        make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
+    ) -> Dict[str, Any]:
+        base, command, prop, value = _parse_command_path(path_str)
+        if not command:
+            typed = list_for_base(base)
+            return {"objects": [o.to_dict() for o in typed]}
+        if prop is None:
+            return {"objects": []}
+        if allowed_group_fields is not None and prop not in allowed_group_fields:
+            return {"objects": []}
+        typed_objects = list(list_for_base(base))
+        if command == "GroupBy":
+            groups = _group_objects_by_property(base, typed_objects, prop, group_icon_filename, make_group)
+            return {"objects": groups}
+        if command == "Show" and value is not None:
+            filtered: list[dict[str, object]] = []
+            for o in typed_objects:
+                try:
+                    v = o.to_dict().get(prop)
+                except Exception:
+                    v = None
+                if v is None:
+                    continue
+                if str(v) == value:
+                    filtered.append(o.to_dict())
+            return {"objects": filtered}
+        return {"objects": []}
+
 
 
 # ---- Object model for provider responses ----
@@ -220,4 +256,63 @@ class ProviderObject:
         }
         payload.update(self._extra_fields())
         return payload
+
+
+@dataclass
+class WPGroup(ProviderObject):
+    @property
+    def class_name(self) -> str:  # noqa: D401
+        return "WPGroup"
+
+
+def _parse_command_path(path_str: str) -> tuple[str, Optional[str], Optional[str], Optional[str]]:
+    base = path_str.lstrip("/")
+    command: Optional[str] = None
+    prop: Optional[str] = None
+    value: Optional[str] = None
+    if "/<" in base and base.endswith(">"):
+        try:
+            head, tail = base.rsplit("/<", 1)
+            token = tail[:-1]
+            parts = token.split(":", 2)
+            if len(parts) >= 2:
+                command = parts[0]
+                prop = parts[1]
+                value = parts[2] if len(parts) == 3 else None
+                base = head
+        except Exception:
+            pass
+    return base, command, prop, value
+
+
+def _group_objects_by_property(
+    base: str,
+    objects: Iterable["ProviderObject"],
+    prop: str,
+    group_icon_filename: str,
+    make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
+) -> list[dict[str, object]]:
+    counts: dict[object, int] = {}
+    for o in objects:
+        try:
+            v = o.to_dict().get(prop)
+        except Exception:
+            v = None
+        if v is None:
+            continue
+        counts[v] = counts.get(v, 0) + 1
+    results: list[dict[str, object]] = []
+    for value, count in counts.items():
+        if make_group is not None:
+            grp_obj = make_group(str(value), prop, count)
+            results.append(grp_obj.to_dict())
+        else:
+            grp_obj = WPGroup(
+                id=f"/{base}/<Show:{prop}:{value}>",
+                title=str(value),
+                icon=group_icon_filename,
+                objects=int(count),
+            )
+            results.append(grp_obj.to_dict())
+    return results
 

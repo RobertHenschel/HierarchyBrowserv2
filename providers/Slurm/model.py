@@ -41,10 +41,8 @@ class WPSlurmJob(ProviderObject):
 
 @dataclass
 class WPSlurmJobGroup(ProviderObject):
-    """Represents a grouping node (e.g., jobs grouped by user)."""
-
     @property
     def class_name(self) -> str:  # noqa: D401
-        return "WPSlurmJobGroup"
+        return "WPGroup"
 
 
