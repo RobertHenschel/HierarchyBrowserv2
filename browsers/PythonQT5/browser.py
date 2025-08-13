@@ -279,6 +279,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self.breadcrumb.crumbClicked.connect(self.on_breadcrumb_clicked)
         left_layout.addWidget(self.breadcrumb)
 
+        # Toolbar directly below breadcrumb
+        toolbar = QtWidgets.QToolBar(left_panel)
+        toolbar.setMovable(False)
+        toolbar.setFloatable(False)
+        toolbar.setIconSize(QtCore.QSize(20, 20))
+        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
+        toolbar.setStyleSheet("QToolBar{spacing:0; margin:0; padding:0; border:0;} QToolButton{margin:0; padding:0; border:0;}")
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setFixedHeight(20)
+        group_action = toolbar.addAction(QtGui.QIcon("./Resources/Group.png"), "Group")
+        group_action.setToolTip("Group")
+        # Ensure the tool button itself is exactly 20x20
+        btn = toolbar.widgetForAction(group_action)
+        if isinstance(btn, QtWidgets.QToolButton):
+            btn.setFixedSize(20, 20)
+            btn.setIconSize(QtCore.QSize(20, 20))
+        group_action.triggered.connect(self.on_group_action_triggered)
+        left_layout.addWidget(toolbar)
+
         self.nav_stack: List[Dict[str, str]] = []
         # Persist the endpoint used to load data for this window
         self.root_host: str = PROVIDER_HOST
@@ -445,6 +464,22 @@ class MainWindow(QtWidgets.QMainWindow):
             except Exception:
                 pass
         self.load_children(remote_id, next_host, next_port)
+
+    def _get_current_path(self) -> str:
+        if not self.nav_stack:
+            return "/"
+        tail = self.nav_stack[-1]
+        # Prefer remote_id because it reflects path on current provider
+        path = tail.get("remote_id") or tail.get("id") or "/"
+        if not isinstance(path, str) or not path:
+            return "/"
+        return path
+
+    def on_group_action_triggered(self) -> None:
+        base_path = self._get_current_path()
+        # Append grouping command using provider-expected token
+        target_path = base_path.rstrip("/") + "/<GroupBy:userid>"
+        self.load_children(target_path, self.current_host, self.current_port)
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()
