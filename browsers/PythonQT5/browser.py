@@ -622,6 +622,7 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     jobarray=bool(obj.get("jobarray", False)),
                     userid=obj.get("userid"),
                     nodecount=int(obj.get("nodecount", 0)),
+                    jobstate=obj.get("jobstate"),
                 )
                 typed.append(inst.to_dict())
             elif cls_name == "WPSlurmJobGroup" and WPSlurmJobGroup is not None:
