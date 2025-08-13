@@ -13,7 +13,7 @@ _PROJECT_ROOT = _PROVIDERS_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from providers.base import ObjectProvider, ProviderOptions
+from providers.base import ObjectProvider, ProviderOptions, ProviderObject
 try:
     from providers.HomeDirectory.model import WPDirectory, WPFile  # type: ignore[import-not-found]
 except Exception:
@@ -80,61 +80,66 @@ class HomeDirectoryProvider(ObjectProvider):
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
         if path_str.strip() == "/" or path_str.strip() == "":
             return self.get_root_objects_payload()
+
         home = Path.home().resolve()
-        rel = path_str.lstrip("/")
-        target = (home / rel).resolve()
-
-        try:
-            target.relative_to(home)
-        except Exception:
-            return {"objects": []}
-
         dir_icon_name = f"./resources/{DIR_ICON_PATH.name}"
         file_icon_name = f"./resources/{FILE_ICON_PATH.name}"
-        objects: List[Dict[str, object]] = []
 
-        if not target.exists() or not target.is_dir():
-            return {"objects": objects}
+        def list_for_base(base_rel: str) -> List[ProviderObject]:
+            rel = base_rel
+            target = (home / rel).resolve()
+            try:
+                target.relative_to(home)
+            except Exception:
+                return []
+            if not target.exists() or not target.is_dir():
+                return []
+            try:
+                entries = sorted(target.iterdir(), key=lambda p: p.name.lower())
+            except Exception:
+                entries = []
+            typed: List[ProviderObject] = []
+            for entry in entries:
+                name = entry.name
+                if entry.is_dir():
+                    try:
+                        count = sum(1 for _ in entry.iterdir())
+                    except Exception:
+                        count = 0
+                    typed.append(
+                        WPDirectory(
+                            id=f"/{rel}/{name}" if rel else f"/{name}",
+                            title=name,
+                            icon=dir_icon_name,
+                            objects=int(count),
+                        )
+                    )
+                elif entry.is_file():
+                    owner_name = None
+                    group_name = None
+                    try:
+                        st = entry.stat()
+                        owner_name = pwd.getpwuid(st.st_uid).pw_name
+                        group_name = grp.getgrgid(st.st_gid).gr_name
+                    except Exception:
+                        pass
+                    typed.append(
+                        WPFile(
+                            id=f"/{rel}/{name}" if rel else f"/{name}",
+                            title=name,
+                            icon=file_icon_name,
+                            objects=0,
+                            owner=owner_name,
+                            group=group_name,
+                        )
+                    )
+            return typed
 
-        try:
-            entries = sorted(target.iterdir(), key=lambda p: p.name.lower())
-        except Exception:
-            entries = []
-
-        for entry in entries:
-            name = entry.name
-            if entry.is_dir():
-                try:
-                    count = sum(1 for _ in entry.iterdir())
-                except Exception:
-                    count = 0
-                obj = WPDirectory(
-                    id=f"/{rel}/{name}" if rel else f"/{name}",
-                    title=name,
-                    icon=dir_icon_name,
-                    objects=int(count),
-                )
-                objects.append(obj.to_dict())
-            elif entry.is_file():
-                owner_name = None
-                group_name = None
-                try:
-                    st = entry.stat()
-                    owner_name = pwd.getpwuid(st.st_uid).pw_name
-                    group_name = grp.getgrgid(st.st_gid).gr_name
-                except Exception:
-                    pass
-                obj = WPFile(
-                    id=f"/{rel}/{name}" if rel else f"/{name}",
-                    title=name,
-                    icon=file_icon_name,
-                    objects=0,
-                    owner=owner_name,
-                    group=group_name,
-                )
-                objects.append(obj.to_dict())
-
-        return {"objects": objects}
+        return self.build_objects_for_path(
+            path_str,
+            list_for_base,
+            group_icon_filename="./resources/Group.png",
+        )
 
 
 def main() -> None:

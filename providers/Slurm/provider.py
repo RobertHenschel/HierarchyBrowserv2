@@ -105,12 +105,10 @@ class SlurmProvider(ObjectProvider):
                 )
             return typed
 
-        allowed = {"userid", "jobarray", "nodecount", "jobstate"}
         return self.build_objects_for_path(
             path_str,
             list_for_base,
-            allowed_group_fields=allowed,
-            group_icon_filename=f"./resources/{JOB_ICON_PATH.name}",
+            group_icon_filename=f"./resources/Group.png",
         )
 
 def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str, int, str]]:
