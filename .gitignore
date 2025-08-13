@@ -1,3 +1,6 @@
 browsers/PythonQT5/__pycache__/*
 providers/__pycache__/*
 providers/Slurm/__pycache__/*
+providers/HomeDirectory/__pycache__/*
+providers/Modules/__pycache__/*
+providers/ResearchComputingAtIU/__pycache__/*

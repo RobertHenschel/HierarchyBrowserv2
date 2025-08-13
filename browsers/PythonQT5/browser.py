@@ -46,11 +46,27 @@ try:
         WPSlurmJob,
         WPSlurmJobGroup,
     )  # type: ignore[import-not-found]
+    from providers.Modules.model import (
+        WPLmodDependency,
+        WPLmodSoftware,
+    )  # type: ignore[import-not-found]
+    from providers.HomeDirectory.model import (
+        WPDirectory,
+        WPFile,
+    )  # type: ignore[import-not-found]
+    from providers.ResearchComputingAtIU.model import (
+        WPObject as RCIU_WPObject,
+    )  # type: ignore[import-not-found]
 except Exception:
     ProviderObject = None  # type: ignore[assignment]
     WPSlurmPartition = None  # type: ignore[assignment]
     WPSlurmJob = None  # type: ignore[assignment]
     WPSlurmJobGroup = None  # type: ignore[assignment]
+    WPLmodDependency = None  # type: ignore[assignment]
+    WPLmodSoftware = None  # type: ignore[assignment]
+    WPDirectory = None  # type: ignore[assignment]
+    WPFile = None  # type: ignore[assignment]
+    RCIU_WPObject = None  # type: ignore[assignment]
 
 PROVIDER_HOST = "127.0.0.1"
 PROVIDER_PORT = 8888
@@ -631,6 +647,49 @@ def _retyped_objects(raw_objects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     title=str(obj.get("title", "")),
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPDirectory" and WPDirectory is not None:
+                inst = WPDirectory(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPFile" and WPFile is not None:
+                inst = WPFile(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPLmodDependency" and WPLmodDependency is not None:
+                inst = WPLmodDependency(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPLmodSoftware" and WPLmodSoftware is not None:
+                inst = WPLmodSoftware(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst.to_dict())
+            elif cls_name == "WPObject" and RCIU_WPObject is not None:
+                # Preserve any extra fields not in the base object
+                extra = {k: v for k, v in obj.items() if k not in {"class", "id", "title", "icon", "objects"}}
+                inst = RCIU_WPObject(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                    extra=extra,
                 )
                 typed.append(inst.to_dict())
             else:

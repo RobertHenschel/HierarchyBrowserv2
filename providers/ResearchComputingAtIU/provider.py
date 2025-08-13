@@ -14,6 +14,13 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from providers.base import ObjectProvider, ProviderOptions
+try:
+    from providers.ResearchComputingAtIU.model import WPObject  # type: ignore[import-not-found]
+except Exception:
+    try:
+        from .model import WPObject  # type: ignore[no-redef]
+    except Exception:
+        from model import WPObject  # type: ignore[no-redef]
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
@@ -56,21 +63,29 @@ def _gather_objects_from_directory(directory: Path) -> List[Dict[str, Any]]:
 
         def push(obj: Any) -> None:
             if isinstance(obj, dict):
-                # Inline icon
+                # Inline icon and normalize to resource filename
                 icon_value = obj.get("icon")
+                norm_icon: Optional[str] = None
                 if isinstance(icon_value, str) and icon_value:
-                    # Convert any provided icon path to the normalized filename form
                     try:
                         icon_path = Path(icon_value)
                         if not icon_path.is_absolute():
                             icon_path = (PROVIDER_DIR / icon_path).resolve()
-                        # Map to ./resources/Name.png for client lookup
-                        obj["icon"] = f"./resources/{icon_path.name}"
+                        norm_icon = f"./resources/{icon_path.name}"
                     except Exception:
-                        obj["icon"] = None
-                # Attach objects count inferred from companion directory
-                obj["objects"] = int(objects_count)
-                results.append(obj)
+                        norm_icon = None
+
+                # Build typed object with passthrough of extra fields
+                core_keys = {"class", "id", "title", "icon", "objects"}
+                extra = {k: v for k, v in obj.items() if k not in core_keys}
+                typed = WPObject(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=norm_icon,
+                    objects=int(objects_count),
+                    extra=extra,
+                )
+                results.append(typed.to_dict())
 
         if isinstance(data, list):
             for item in data:

@@ -12,6 +12,13 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from providers.base import ObjectProvider, ProviderOptions
+try:
+    from providers.Modules.model import WPLmodDependency, WPLmodSoftware  # type: ignore[import-not-found]
+except Exception:
+    try:
+        from .model import WPLmodDependency, WPLmodSoftware  # type: ignore[no-redef]
+    except Exception:
+        from model import WPLmodDependency, WPLmodSoftware  # type: ignore[no-redef]
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
@@ -58,15 +65,13 @@ class ModulesProvider(ObjectProvider):
         objects: List[Dict[str, object]] = []
         for name in names:
             count = _count_module_children(LMOD_ROOT / name)
-            objects.append(
-                {
-                    "class": "WPLmodDependency",
-                    "id": f"/{name}",
-                    "icon": icon_name,
-                    "title": name,
-                    "objects": int(count),
-                }
+            obj = WPLmodDependency(
+                id=f"/{name}",
+                title=name,
+                icon=icon_name,
+                objects=int(count),
             )
+            objects.append(obj.to_dict())
         return {"objects": objects}
 
 
@@ -87,15 +92,13 @@ class ModulesProvider(ObjectProvider):
                         continue
                     count = _count_module_children(entry)
                     obj_id = f"/{rel}/{entry.name}" if rel else f"/{entry.name}"
-                    objects.append(
-                        {
-                            "class": "WPLmodDependency",
-                            "id": obj_id,
-                            "icon": icon_name,
-                            "title": entry.name,
-                            "objects": int(count),
-                        }
+                    obj = WPLmodDependency(
+                        id=obj_id,
+                        title=entry.name,
+                        icon=icon_name,
+                        objects=int(count),
                     )
+                    objects.append(obj.to_dict())
 
                 # Also expose software entries under immediate "modulefiles" directories
                 for mf in [p for p in base.iterdir() if p.is_dir() and p.name == "modulefiles"]:
@@ -104,15 +107,13 @@ class ModulesProvider(ObjectProvider):
                             if not sw.is_dir():
                                 continue
                             sw_id = f"/{rel}/{sw.name}" if rel else f"/{sw.name}"
-                            objects.append(
-                                {
-                                    "class": "WPLmodSoftware",
-                                    "id": sw_id,
-                                    "icon": icon_sw_name,
-                                    "title": sw.name,
-                                    "objects": 0,
-                                }
+                            obj = WPLmodSoftware(
+                                id=sw_id,
+                                title=sw.name,
+                                icon=icon_sw_name,
+                                objects=0,
                             )
+                            objects.append(obj.to_dict())
                     except Exception:
                         continue
         except Exception:

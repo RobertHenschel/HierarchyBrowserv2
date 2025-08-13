@@ -12,6 +12,13 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from providers.base import ObjectProvider, ProviderOptions
+try:
+    from providers.HomeDirectory.model import WPDirectory, WPFile  # type: ignore[import-not-found]
+except Exception:
+    try:
+        from .model import WPDirectory, WPFile  # type: ignore[no-redef]
+    except Exception:
+        from model import WPDirectory, WPFile  # type: ignore[no-redef]
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
@@ -40,25 +47,21 @@ class HomeDirectoryProvider(ObjectProvider):
                     count = sum(1 for _ in entry.iterdir())
                 except Exception:
                     count = 0
-                objects.append(
-                    {
-                        "class": "WPDirectory",
-                        "id": f"/{name}",
-                        "icon": dir_icon_name,
-                        "title": name,
-                        "objects": int(count),
-                    }
+                obj = WPDirectory(
+                    id=f"/{name}",
+                    title=name,
+                    icon=dir_icon_name,
+                    objects=int(count),
                 )
+                objects.append(obj.to_dict())
             elif entry.is_file():
-                objects.append(
-                    {
-                        "class": "WPFile",
-                        "id": f"/{name}",
-                        "icon": file_icon_name,
-                        "title": name,
-                        "objects": 0,
-                    }
+                obj = WPFile(
+                    id=f"/{name}",
+                    title=name,
+                    icon=file_icon_name,
+                    objects=0,
                 )
+                objects.append(obj.to_dict())
 
         return {"objects": objects}
 
@@ -93,25 +96,21 @@ class HomeDirectoryProvider(ObjectProvider):
                     count = sum(1 for _ in entry.iterdir())
                 except Exception:
                     count = 0
-                objects.append(
-                    {
-                        "class": "WPDirectory",
-                        "id": f"/{rel}/{name}" if rel else f"/{name}",
-                        "icon": dir_icon_name,
-                        "title": name,
-                        "objects": int(count),
-                    }
+                obj = WPDirectory(
+                    id=f"/{rel}/{name}" if rel else f"/{name}",
+                    title=name,
+                    icon=dir_icon_name,
+                    objects=int(count),
                 )
+                objects.append(obj.to_dict())
             elif entry.is_file():
-                objects.append(
-                    {
-                        "class": "WPFile",
-                        "id": f"/{rel}/{name}" if rel else f"/{name}",
-                        "icon": file_icon_name,
-                        "title": name,
-                        "objects": 0,
-                    }
+                obj = WPFile(
+                    id=f"/{rel}/{name}" if rel else f"/{name}",
+                    title=name,
+                    icon=file_icon_name,
+                    objects=0,
                 )
+                objects.append(obj.to_dict())
 
         return {"objects": objects}
 
