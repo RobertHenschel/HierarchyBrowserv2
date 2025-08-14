@@ -385,6 +385,100 @@ class MainWindow(QtWidgets.QMainWindow):
         self.grid_layout = grid_layout
         self.load_root(self.root_host, self.root_port)
 
+    def navigate_to_path(self, full_path: str) -> None:
+        # Expected: /[host:port]/seg/... with optional multiple [host:port] mid-path
+        path = full_path.strip()
+        if not path.startswith("/"):
+            path = "/" + path
+
+        def _is_host_token(seg: str) -> bool:
+            return seg.startswith("[") and seg.endswith("]") and len(seg) > 2
+
+        def _parse_host_token(seg: str) -> tuple[Optional[str], Optional[int]]:
+            inner = seg[1:-1]
+            if ":" in inner:
+                h, p = inner.split(":", 1)
+                try:
+                    return h, int(p)
+                except Exception:
+                    return h, None
+            return inner, None
+
+        current_id = "/"
+        segs = [s for s in path.split("/") if s != ""]
+        processed_any = False
+        for seg in segs:
+            if _is_host_token(seg):
+                # Switch provider
+                h, p = _parse_host_token(seg)
+                if isinstance(h, str) and h:
+                    new_host = h
+                else:
+                    new_host = self.root_host
+                new_port = self.root_port
+                if isinstance(p, int):
+                    new_port = p
+                if new_host != self.current_host or new_port != self.current_port:
+                    # Load info for root name and icons on new endpoint
+                    try:
+                        info = fetch_info(new_host, new_port)
+                        root_name = info.get("RootName") if isinstance(info, dict) else None
+                        self.add_icons_from_info(info)
+                    except Exception:
+                        pass
+                    # First provider in path: replace root; subsequent: append a crumb for the new provider root
+                    if not processed_any and len(self.nav_stack) == 0:
+                        if isinstance(root_name, str) and root_name:
+                            self.root_name = root_name
+                        self.nav_stack = []
+                        self.breadcrumb.set_path([self.root_name])
+                    else:
+                        title = root_name if isinstance(root_name, str) and root_name else f"{new_host}:{new_port}"
+                        self.nav_stack.append({
+                            "id": "/",
+                            "title": title,
+                            "host": new_host,
+                            "port": str(new_port),
+                            "remote_id": "/",
+                        })
+                        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+                    self.current_host, self.current_port = new_host, new_port
+                    self.load_root(self.current_host, self.current_port)
+                current_id = "/"
+                continue
+
+            # Normal path segment: traverse
+            data = fetch_objects_for_id(current_id, self.current_host, self.current_port)
+            children = data.get("objects", []) if isinstance(data, dict) else []
+            match = None
+            for o in children:
+                od = _obj_to_dict(o)
+                oid = od.get("id")
+                title = od.get("title")
+                if isinstance(oid, str) and oid.rstrip("/").endswith("/" + seg):
+                    match = od
+                    break
+                if isinstance(title, str) and title == seg:
+                    match = od
+                    break
+            if not match:
+                break
+            try:
+                objects_count = int(match.get("objects", 0))
+            except Exception:
+                objects_count = 0
+            object_id = match.get("id")
+            title = match.get("title")
+            if not isinstance(object_id, str) or not isinstance(title, str):
+                break
+            self.nav_stack.append({"id": object_id, "title": title, "host": self.current_host, "port": str(self.current_port), "remote_id": object_id})
+            self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+            processed_any = True
+            if objects_count == 0:
+                break
+            current_id = object_id
+            self.load_children(current_id, self.current_host, self.current_port)
+
     def clear_grid(self) -> None:
         # Reset selection because existing widgets will be deleted
         self.selected_item = None
@@ -726,6 +820,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Hierarchy Browser (Qt5)")
     parser.add_argument("--host", default=PROVIDER_HOST, help="Provider host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=PROVIDER_PORT, help="Provider port (default: 8888)")
+    parser.add_argument("--path", default=None, help="Navigation path: /[host:port]/segment/segment")
     args, unknown = parser.parse_known_args()
     PROVIDER_HOST = args.host
     PROVIDER_PORT = args.port
@@ -733,6 +828,12 @@ def main() -> None:
     app = QtWidgets.QApplication([sys.argv[0]] + unknown)
     win = MainWindow()
     win.show()
+    # Optional deep-link navigation
+    if isinstance(args.path, str) and args.path:
+        try:
+            win.navigate_to_path(args.path)
+        except Exception:
+            pass
     sys.exit(app.exec_())
 
 
