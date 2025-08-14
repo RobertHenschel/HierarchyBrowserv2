@@ -21,6 +21,7 @@ except Exception:
 try:
     from .details_panel import DetailsPanel  # type: ignore[import-not-found]
     from .context_actions import execute_context_action  # type: ignore[import-not-found]
+    from .toolbar import ObjectToolbar  # type: ignore[import-not-found]
 except Exception:
     # Fallback for `./browser.py` execution (no package context)
     import os as _os
@@ -30,6 +31,8 @@ except Exception:
         _sys.path.insert(0, _this_dir)
     from details_panel import DetailsPanel  # type: ignore[no-redef]
     from context_actions import execute_context_action  # type: ignore[no-redef]
+    from toolbar import ObjectToolbar  # type: ignore[no-redef]
+    from toolbar import ObjectToolbar  # type: ignore[no-redef]
 
 
 # Allow importing shared provider models when running directly
@@ -321,22 +324,10 @@ class MainWindow(QtWidgets.QMainWindow):
         left_layout.addWidget(self.breadcrumb)
 
         # Toolbar directly below breadcrumb
-        toolbar = QtWidgets.QToolBar(left_panel)
-        toolbar.setMovable(False)
-        toolbar.setFloatable(False)
-        toolbar.setIconSize(QtCore.QSize(20, 20))
-        toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
-        toolbar.setStyleSheet("QToolBar{spacing:0; margin:0; padding:0; border:0;} QToolButton{margin:0; padding:0; border:0;}")
-        toolbar.setContentsMargins(0, 0, 0, 0)
-        toolbar.setFixedHeight(20)
-        group_action = toolbar.addAction(QtGui.QIcon("./Resources/Group.png"), "Group")
-        group_action.setToolTip("Group")
-        # Ensure the tool button itself is exactly 20x20
-        btn = toolbar.widgetForAction(group_action)
-        if isinstance(btn, QtWidgets.QToolButton):
-            btn.setFixedSize(20, 20)
-            btn.setIconSize(QtCore.QSize(20, 20))
-        group_action.triggered.connect(self.on_group_action_triggered)
+        toolbar = ObjectToolbar(left_panel)
+        toolbar.action_group.setToolTip("Group")
+        toolbar.action_group.triggered.connect(self.on_group_action_triggered)
+        toolbar.get_current_deeplink = self._build_current_deeplink
         left_layout.addWidget(toolbar)
 
         self.nav_stack: List[Dict[str, str]] = []
@@ -640,6 +631,18 @@ class MainWindow(QtWidgets.QMainWindow):
         base_path = self._get_current_path()
         target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
         self.load_children(target_path, self.current_host, self.current_port)
+
+    def _build_current_deeplink(self) -> str:
+        # Build a /[host:port]/seg/... path that replays the current breadcrumb
+        parts: list[str] = []
+        # The first provider root
+        parts.append(f"[{self.current_host}:{self.current_port}]")
+        # Resolve all titles from nav_stack; we only include titles since ids are path-suffixed
+        for entry in self.nav_stack:
+            title = entry.get("title")
+            if isinstance(title, str) and title and title != "/":
+                parts.append(title)
+        return "/" + "/".join(parts) + "/"
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()
