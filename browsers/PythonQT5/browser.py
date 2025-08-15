@@ -451,7 +451,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 current_id = "/"
                 continue
 
-            # Command token like <GroupBy:prop>
+            # Command token like <GroupBy:prop> or <Show:prop:value>
             if _is_command_token(seg):
                 # Apply command to current path
                 target_remote = current_id.rstrip("/") + "/" + seg
@@ -470,6 +470,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             title = seg
                 except Exception:
                     pass
+                print(f"[DEBUG] Breadcrumb command token: seg={seg}, title={title}")
                 self.nav_stack.append({
                     "id": current_id,
                     "title": title,
@@ -506,19 +507,21 @@ class MainWindow(QtWidgets.QMainWindow):
             object_id = match.get("id")
             title = match.get("title")
             remote_id = match.get("remote_id") or object_id
-            print(f"[DEBUG] Breadcrumb click: object_id={object_id}, remote_id={remote_id}, title={title}")
             # Humanize <Show:...> tokens for breadcrumb if present in id or remote_id
             human_title = title
             try:
                 if isinstance(remote_id, str) and remote_id:
                     seg = remote_id.strip("/").split("/")[-1]
-                    if seg.startswith("<Show:") and seg.endswith(">"):
+                    if seg.startswith("<GroupBy:") and seg.endswith(">"):
+                        human_title = f"Group by {seg[len('<GroupBy:'):-1]}"
+                    elif seg.startswith("<Show:") and seg.endswith(">"):
                         parts = seg[1:-1].split(":", 2)
                         if len(parts) == 3:
                             _, prop, value = parts
                             human_title = f"Show {prop} = {value}"
             except Exception:
                 pass
+            print(f"[DEBUG] Breadcrumb click: object_id={object_id}, remote_id={remote_id}, title={title}, human_title={human_title}")
             if not isinstance(object_id, str) or not isinstance(human_title, str):
                 break
             self.nav_stack.append({"id": object_id, "title": human_title, "host": self.current_host, "port": str(self.current_port), "remote_id": object_id})
