@@ -77,7 +77,7 @@ class ObjectToolbar(QtWidgets.QToolBar):
             QtWidgets.QMessageBox.warning(self, "Shortcut error", f"Failed to create shortcut:\n{e}")
 
     def _build_current_deeplink_from_state(self) -> str:
-        # Build /[host:port]/seg/... inserting provider switch tokens when host:port changes
+        # Build /[host:port]/seg/... and include command tokens from remote_id (e.g., <GroupBy:...>)
         try:
             if not callable(self.get_state):
                 return "/"
@@ -96,16 +96,26 @@ class ObjectToolbar(QtWidgets.QToolBar):
                 if entry_host != prev_host or entry_port != prev_port:
                     parts.append(f"[{entry_host}:{entry_port}]")
                     prev_host, prev_port = entry_host, entry_port
-                # Skip provider root markers
-                oid = entry.get("id")
-                if isinstance(oid, str) and oid == "/":
-                    continue
-                remote_id = entry.get("remote_id")
+                # Use remote_id to carry command tokens; skip provider root markers
+                remote_id = entry.get("remote_id") or entry.get("id") or "/"
                 if isinstance(remote_id, str) and remote_id == "/":
+                    # This entry represents the provider root after a host switch; omit its name
                     continue
-                title = entry.get("title")
-                if isinstance(title, str) and title and title != "/":
-                    parts.append(title)
+                seg: Optional[str] = None
+                try:
+                    if isinstance(remote_id, str) and "/<" in remote_id:
+                        # Append command token such as <GroupBy:...>
+                        seg = remote_id.split("/")[-1]
+                    else:
+                        # Prefer human-readable title; fall back to last path segment
+                        t = entry.get("title")
+                        seg = t if isinstance(t, str) and t else None
+                        if not seg and isinstance(remote_id, str):
+                            seg = remote_id.strip("/").split("/")[-1]
+                except Exception:
+                    seg = None
+                if isinstance(seg, str) and seg and seg != "/":
+                    parts.append(seg)
             return "/" + "/".join(parts) + "/"
         except Exception:
             return "/"

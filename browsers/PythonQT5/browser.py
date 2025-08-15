@@ -405,6 +405,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     return h, None
             return inner, None
 
+        def _is_command_token(seg: str) -> bool:
+            return seg.startswith("<") and seg.endswith(">") and len(seg) > 2
+
         current_id = "/"
         segs = [s for s in path.split("/") if s != ""]
         processed_any = False
@@ -446,6 +449,30 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.current_host, self.current_port = new_host, new_port
                     self.load_root(self.current_host, self.current_port)
                 current_id = "/"
+                continue
+
+            # Command token like <GroupBy:prop>
+            if _is_command_token(seg):
+                # Apply command to current path
+                target_remote = current_id.rstrip("/") + "/" + seg
+                # Derive a human title for breadcrumb when possible
+                title = seg
+                try:
+                    if seg.startswith("<GroupBy:") and seg.endswith(">"):
+                        title = f"Group by {seg[len('<GroupBy:'):-1]}"
+                except Exception:
+                    pass
+                self.nav_stack.append({
+                    "id": current_id,
+                    "title": title,
+                    "host": self.current_host,
+                    "port": str(self.current_port),
+                    "remote_id": target_remote,
+                })
+                self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+                processed_any = True
+                current_id = target_remote
+                self.load_children(current_id, self.current_host, self.current_port)
                 continue
 
             # Normal path segment: traverse
@@ -640,6 +667,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def _group_by_property(self, prop: str) -> None:
         base_path = self._get_current_path()
         target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
+        # Push a breadcrumb level representing the grouping view
+        self.nav_stack.append({
+            "id": base_path,
+            "title": f"Group by {prop}",
+            "host": self.current_host,
+            "port": str(self.current_port),
+            "remote_id": target_path,
+        })
+        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         self.load_children(target_path, self.current_host, self.current_port)
 
     # Deep link building moved into toolbar.py
