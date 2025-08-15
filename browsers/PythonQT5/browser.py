@@ -645,8 +645,32 @@ class MainWindow(QtWidgets.QMainWindow):
         # Determine remote id: if switching endpoints, start at root "/"
         switching = (next_host != self.current_host) or (next_port != self.current_port)
         remote_id = "/" if switching else object_id
+
+        # Humanize breadcrumb title when navigating into command tokens (GroupBy/Show)
+        human_title = title
+        try:
+            if isinstance(remote_id, str) and remote_id:
+                seg = remote_id.strip("/").split("/")[-1]
+                if seg.startswith("<GroupBy:") and seg.endswith(">"):
+                    human_title = f"Group by {seg[len('<GroupBy:'):-1]}"
+                elif seg.startswith("<Show:") and seg.endswith(">"):
+                    parts = seg[1:-1].split(":", 2)
+                    if len(parts) == 3:
+                        _, prop, value = parts
+                        human_title = f"Show {prop} = {value}"
+        except Exception:
+            pass
+        # Debug output for UI-driven navigation
+        try:
+            print(
+                f"[DEBUG] UI activate: object_id={object_id}, title={title}, objects={objects_count}, "
+                f"current={self.current_host}:{self.current_port}, next={next_host}:{next_port}, "
+                f"remote_id={remote_id}, switching={switching}"
+            )
+        except Exception:
+            pass
         # Push into stack and navigate using next endpoint
-        self.nav_stack.append({"id": object_id, "title": title, "host": next_host, "port": str(next_port), "remote_id": remote_id})
+        self.nav_stack.append({"id": object_id, "title": human_title, "host": next_host, "port": str(next_port), "remote_id": remote_id})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         # If switching to a different provider endpoint, fetch its info and merge icons
         switching = (next_host != self.current_host) or (next_port != self.current_port)
@@ -692,6 +716,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _group_by_property(self, prop: str) -> None:
         base_path = self._get_current_path()
         target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
+        try:
+            print(f"[DEBUG] UI group-by: base_path={base_path}, target_path={target_path}, host={self.current_host}, port={self.current_port}")
+        except Exception:
+            pass
         # Push a breadcrumb level representing the grouping view
         self.nav_stack.append({
             "id": base_path,
@@ -742,6 +770,13 @@ class MainWindow(QtWidgets.QMainWindow):
             target_port = int(target.get("port")) if target.get("port") is not None else self.root_port
         except Exception:
             target_port = self.root_port
+        try:
+            print(
+                f"[DEBUG] UI breadcrumb click: index={index}, target_id={target_id}, remote_id={target_remote_id}, "
+                f"host={target_host}, port={target_port}"
+            )
+        except Exception:
+            pass
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         self.current_host, self.current_port = target_host, target_port
         self.load_children(target_remote_id, target_host, target_port)
