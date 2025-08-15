@@ -505,9 +505,22 @@ class MainWindow(QtWidgets.QMainWindow):
                 objects_count = 0
             object_id = match.get("id")
             title = match.get("title")
-            if not isinstance(object_id, str) or not isinstance(title, str):
+            # Humanize <Show:...> tokens for breadcrumb if present in id or remote_id
+            remote_id = match.get("remote_id") or object_id
+            human_title = title
+            try:
+                if isinstance(remote_id, str) and remote_id:
+                    seg = remote_id.strip("/").split("/")[-1]
+                    if seg.startswith("<Show:") and seg.endswith(">"):
+                        parts = seg[1:-1].split(":", 2)
+                        if len(parts) == 3:
+                            _, prop, value = parts
+                            human_title = f"Show {prop} = {value}"
+            except Exception:
+                pass
+            if not isinstance(object_id, str) or not isinstance(human_title, str):
                 break
-            self.nav_stack.append({"id": object_id, "title": title, "host": self.current_host, "port": str(self.current_port), "remote_id": object_id})
+            self.nav_stack.append({"id": object_id, "title": human_title, "host": self.current_host, "port": str(self.current_port), "remote_id": object_id})
             self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
             processed_any = True
             if objects_count == 0:
