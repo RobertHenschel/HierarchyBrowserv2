@@ -87,7 +87,10 @@ class SlurmProvider(ObjectProvider):
             return self.get_root_objects_payload()
 
         def list_for_base(base: str) -> List[ProviderObject]:
-            part = base
+            # base may be e.g. 'partition' or 'partition/otherstuff', always use first segment as partition
+            part = base.strip("/").split("/")[0] if base.strip("/") else base.strip("/")
+            if not part:
+                return []
             icon_name = f"./resources/{JOB_ICON_PATH.name}"
             typed: List[ProviderObject] = []
             for jid, user, nodes, state in _get_jobs_and_users_for_partition(part):
