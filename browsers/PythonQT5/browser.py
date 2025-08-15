@@ -505,8 +505,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 objects_count = 0
             object_id = match.get("id")
             title = match.get("title")
-            # Humanize <Show:...> tokens for breadcrumb if present in id or remote_id
             remote_id = match.get("remote_id") or object_id
+            print(f"[DEBUG] Breadcrumb click: object_id={object_id}, remote_id={remote_id}, title={title}")
+            # Humanize <Show:...> tokens for breadcrumb if present in id or remote_id
             human_title = title
             try:
                 if isinstance(remote_id, str) and remote_id:
