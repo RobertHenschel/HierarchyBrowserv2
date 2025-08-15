@@ -327,7 +327,7 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar = ObjectToolbar(left_panel)
         toolbar.action_group.setToolTip("Group")
         toolbar.action_group.triggered.connect(self.on_group_action_triggered)
-        toolbar.get_current_deeplink = self._build_current_deeplink
+        toolbar.get_state = lambda: (self.nav_stack, self.current_host, self.current_port)
         left_layout.addWidget(toolbar)
 
         self.nav_stack: List[Dict[str, str]] = []
@@ -632,37 +632,7 @@ class MainWindow(QtWidgets.QMainWindow):
         target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
         self.load_children(target_path, self.current_host, self.current_port)
 
-    def _build_current_deeplink(self) -> str:
-        # Build a /[host:port]/seg/... path, inserting [host:port] before the first
-        # breadcrumb and whenever the provider (host:port) changes along the way.
-        parts: list[str] = []
-        if not self.nav_stack:
-            parts.append(f"[{self.current_host}:{self.current_port}]")
-            return "/" + "/".join(parts) + "/"
-
-        prev_host: Optional[str] = None
-        prev_port: Optional[int] = None
-        for entry in self.nav_stack:
-            entry_host = entry.get("host") or self.current_host
-            try:
-                entry_port = int(entry.get("port")) if entry.get("port") is not None else self.current_port
-            except Exception:
-                entry_port = self.current_port
-            if entry_host != prev_host or entry_port != prev_port:
-                parts.append(f"[{entry_host}:{entry_port}]")
-                prev_host, prev_port = entry_host, entry_port
-            # Skip adding the provider root title (id == "/"); only add real path segments
-            oid = entry.get("id")
-            if isinstance(oid, str) and oid == "/":
-                continue
-            # Skip titles for entries that represent a provider switch trigger
-            remote_id = entry.get("remote_id")
-            if isinstance(remote_id, str) and remote_id == "/":
-                continue
-            title = entry.get("title")
-            if isinstance(title, str) and title and title != "/":
-                parts.append(title)
-        return "/" + "/".join(parts) + "/"
+    # Deep link building moved into toolbar.py
 
     def on_item_clicked(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Callable
+from typing import Optional, Callable, List, Dict, Tuple
 import os
 import sys
 from datetime import datetime
@@ -20,6 +20,9 @@ class ObjectToolbar(QtWidgets.QToolBar):
         self.setFixedHeight(25)
 
         # Group button
+        spacer = QtWidgets.QWidget(self)
+        spacer.setFixedWidth(8)
+        self.addWidget(spacer)
         self.action_group = self.addAction(QtGui.QIcon("./Resources/Group.png"), "Group")
         btn = self.widgetForAction(self.action_group)
         if isinstance(btn, QtWidgets.QToolButton):
@@ -36,17 +39,12 @@ class ObjectToolbar(QtWidgets.QToolBar):
             btn2.setFixedSize(25, 25)
             btn2.setIconSize(QtCore.QSize(25, 25))
 
-        # Callback to obtain current deep-link path from host window
-        self.get_current_deeplink: Optional[Callable[[], str]] = None
+        # Callback to obtain navigation state from host window: (nav_stack, host, port)
+        self.get_state: Optional[Callable[[], Tuple[List[Dict[str, str]], str, int]]] = None
         self.action_link.triggered.connect(self._on_create_shortcut)
 
     def _on_create_shortcut(self) -> None:
-        deeplink = "/"
-        try:
-            if callable(self.get_current_deeplink):
-                deeplink = self.get_current_deeplink() or "/"
-        except Exception:
-            deeplink = "/"
+        deeplink = self._build_current_deeplink_from_state()
         # Resolve executable and script path
         try:
             exe = sys.executable
@@ -77,5 +75,39 @@ class ObjectToolbar(QtWidgets.QToolBar):
             QtWidgets.QMessageBox.information(self, "Shortcut created", f"Created shortcut at:\n{file_path}")
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, "Shortcut error", f"Failed to create shortcut:\n{e}")
+
+    def _build_current_deeplink_from_state(self) -> str:
+        # Build /[host:port]/seg/... inserting provider switch tokens when host:port changes
+        try:
+            if not callable(self.get_state):
+                return "/"
+            nav_stack, current_host, current_port = self.get_state()  # type: ignore[assignment]
+            parts: List[str] = []
+            if not isinstance(nav_stack, list) or len(nav_stack) == 0:
+                return f"/[{current_host}:{current_port}]/"
+            prev_host: Optional[str] = None
+            prev_port: Optional[int] = None
+            for entry in nav_stack:
+                entry_host = entry.get("host") or current_host
+                try:
+                    entry_port = int(entry.get("port")) if entry.get("port") is not None else current_port
+                except Exception:
+                    entry_port = current_port
+                if entry_host != prev_host or entry_port != prev_port:
+                    parts.append(f"[{entry_host}:{entry_port}]")
+                    prev_host, prev_port = entry_host, entry_port
+                # Skip provider root markers
+                oid = entry.get("id")
+                if isinstance(oid, str) and oid == "/":
+                    continue
+                remote_id = entry.get("remote_id")
+                if isinstance(remote_id, str) and remote_id == "/":
+                    continue
+                title = entry.get("title")
+                if isinstance(title, str) and title and title != "/":
+                    parts.append(title)
+            return "/" + "/".join(parts) + "/"
+        except Exception:
+            return "/"
 
 
