@@ -86,9 +86,11 @@ class SlurmProvider(ObjectProvider):
         if path_str.strip() == "/" or path_str.strip() == "":
             return self.get_root_objects_payload()
 
+
         def list_for_base(base: str) -> List[ProviderObject]:
-            # base may be e.g. 'partition' or 'partition/otherstuff', always use first segment as partition
-            part = base.strip("/").split("/")[0] if base.strip("/") else base.strip("/")
+            # Always extract the partition as the first segment, ignoring any command tokens
+            segments = base.strip("/").split("/")
+            part = segments[0] if segments else ""
             if not part:
                 return []
             icon_name = f"./resources/{JOB_ICON_PATH.name}"
