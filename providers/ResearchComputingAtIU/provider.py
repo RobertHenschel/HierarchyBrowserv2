@@ -75,17 +75,18 @@ def _gather_objects_from_directory(directory: Path) -> List[Dict[str, Any]]:
                     except Exception:
                         norm_icon = None
 
-                # Build typed object with passthrough of extra fields
+                # Build payload preserving the original class for template selection
                 core_keys = {"class", "id", "title", "icon", "objects"}
                 extra = {k: v for k, v in obj.items() if k not in core_keys}
-                typed = WPObject(
-                    id=str(obj.get("id", "")),
-                    title=str(obj.get("title", "")),
-                    icon=norm_icon,
-                    objects=int(objects_count),
-                    extra=extra,
-                )
-                results.append(typed.to_dict())
+                payload: Dict[str, Any] = {
+                    "class": str(obj.get("class") or "WPObject"),
+                    "id": str(obj.get("id", "")),
+                    "title": str(obj.get("title", "")),
+                    "icon": norm_icon,
+                    "objects": int(objects_count),
+                }
+                payload.update(extra)
+                results.append(payload)
 
         if isinstance(data, list):
             for item in data:
