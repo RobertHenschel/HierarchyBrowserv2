@@ -393,7 +393,10 @@ class MainWindow(QtWidgets.QMainWindow):
             path = "/" + path
 
         def _is_host_token(seg: str) -> bool:
-            return seg.startswith("[") and seg.endswith("]") and len(seg) > 2
+            if not (seg.startswith("[") and seg.endswith("]") and len(seg) > 2):
+                return False
+            inner = seg[1:-1]
+            return ":" in inner  # host tokens require host:port
 
         def _parse_host_token(seg: str) -> tuple[Optional[str], Optional[int]]:
             inner = seg[1:-1]
@@ -409,9 +412,18 @@ class MainWindow(QtWidgets.QMainWindow):
             return seg.startswith("<") and seg.endswith(">") and len(seg) > 2
 
         current_id = "/"
+        last_obj: Optional[Dict[str, Any]] = None
         segs = [s for s in path.split("/") if s != ""]
         processed_any = False
-        for seg in segs:
+        for idx, seg in enumerate(segs):
+            # Special action token: [openaction]
+            if isinstance(seg, str) and seg.lower() == "[openaction]":
+                if isinstance(last_obj, dict):
+                    try:
+                        self.perform_openaction(last_obj)
+                    except Exception:
+                        pass
+                break
             if _is_host_token(seg):
                 # Switch provider
                 h, p = _parse_host_token(seg)
@@ -453,7 +465,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
             # Command token like <GroupBy:prop> or <Show:prop:value>
             if _is_command_token(seg):
-                # Apply command to current path
+                # Special command token: <OpenAction>
+                if isinstance(seg, str) and seg.lower() == "<openaction>":
+                    if isinstance(last_obj, dict):
+                        try:
+                            self.perform_openaction(last_obj)
+                        except Exception:
+                            pass
+                    break
+                # Apply other command tokens to current path
                 target_remote = current_id.rstrip("/") + "/" + seg
                 # Derive a human title for breadcrumb when possible
                 title = seg
@@ -470,7 +490,6 @@ class MainWindow(QtWidgets.QMainWindow):
                             title = seg
                 except Exception:
                     pass
-                print(f"[DEBUG] Breadcrumb command token: seg={seg}, title={title}")
                 self.nav_stack.append({
                     "id": current_id,
                     "title": title,
@@ -500,6 +519,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     break
             if not match:
                 break
+            last_obj = match if isinstance(match, dict) else None
             try:
                 objects_count = int(match.get("objects", 0))
             except Exception:
@@ -521,13 +541,14 @@ class MainWindow(QtWidgets.QMainWindow):
                             human_title = f"Show {prop} = {value}"
             except Exception:
                 pass
-            print(f"[DEBUG] Breadcrumb click: object_id={object_id}, remote_id={remote_id}, title={title}, human_title={human_title}")
             if not isinstance(object_id, str) or not isinstance(human_title, str):
                 break
             self.nav_stack.append({"id": object_id, "title": human_title, "host": self.current_host, "port": str(self.current_port), "remote_id": object_id})
             self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
             processed_any = True
-            if objects_count == 0:
+            # If the next segment is a command token (e.g., <OpenAction>), allow it even for leaf objects
+            next_seg = segs[idx + 1] if (idx + 1) < len(segs) else None
+            if objects_count == 0 and not (isinstance(next_seg, str) and _is_command_token(next_seg)):
                 break
             current_id = object_id
             self.load_children(current_id, self.current_host, self.current_port)
@@ -610,6 +631,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.populate_objects(objects)
 
     def on_item_activated(self, obj: Dict[str, Any]) -> None:
+        # If object defines an openaction, perform it and stop
+        try:
+            oa = obj.get("openaction")
+            if isinstance(oa, list) and len(oa) > 0:
+                self.perform_openaction(obj)
+                return
+        except Exception:
+            pass
         try:
             objects_count = int(obj.get("objects", 0))
         except Exception:
@@ -660,15 +689,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         human_title = f"Show {prop} = {value}"
         except Exception:
             pass
-        # Debug output for UI-driven navigation
-        try:
-            print(
-                f"[DEBUG] UI activate: object_id={object_id}, title={title}, objects={objects_count}, "
-                f"current={self.current_host}:{self.current_port}, next={next_host}:{next_port}, "
-                f"remote_id={remote_id}, switching={switching}"
-            )
-        except Exception:
-            pass
+
         # Push into stack and navigate using next endpoint
         self.nav_stack.append({"id": object_id, "title": human_title, "host": next_host, "port": str(next_port), "remote_id": remote_id})
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
@@ -716,10 +737,6 @@ class MainWindow(QtWidgets.QMainWindow):
     def _group_by_property(self, prop: str) -> None:
         base_path = self._get_current_path()
         target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
-        try:
-            print(f"[DEBUG] UI group-by: base_path={base_path}, target_path={target_path}, host={self.current_host}, port={self.current_port}")
-        except Exception:
-            pass
         # Push a breadcrumb level representing the grouping view
         self.nav_stack.append({
             "id": base_path,
@@ -750,6 +767,70 @@ class MainWindow(QtWidgets.QMainWindow):
         # Populate details panel with selected object's properties
         self.details_panel.set_object(_obj_to_dict(obj))
 
+    def perform_openaction(self, obj: Dict[str, Any]) -> None:
+        """Execute the object's openaction as if the user activated it.
+
+        Supports:
+        - action == "objectbrowser": switch to target provider and load its root
+        - any other actions: delegated to execute_context_action
+        """
+        print(f"[DEBUG] Performing openaction: {obj}")
+        if not isinstance(obj, dict):
+            return
+        open_action = obj.get("openaction")
+        if not isinstance(open_action, list) or not open_action:
+            return
+        entry = None
+        for item in open_action:
+            if isinstance(item, dict):
+                entry = item
+                break
+        if not isinstance(entry, dict):
+            return
+        act = str(entry.get("action", "")).lower()
+        if act == "objectbrowser":
+            next_host: str = self.current_host
+            next_port: int = self.current_port
+            candidate_host = entry.get("hostname") or entry.get("host")
+            if isinstance(candidate_host, str) and candidate_host:
+                next_host = candidate_host
+            try:
+                if entry.get("port") is not None:
+                    next_port = int(entry.get("port"))
+            except Exception:
+                pass
+            switching = (next_host != self.current_host) or (next_port != self.current_port)
+            remote_id = "/"
+            # Push breadcrumb level and switch
+            title = entry.get("title") or f"{next_host}:{next_port}"
+            self.nav_stack.append({
+                "id": obj.get("id") or "/",
+                "title": str(title),
+                "host": next_host,
+                "port": str(next_port),
+                "remote_id": remote_id,
+            })
+            self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+            self.current_host, self.current_port = next_host, next_port
+            if switching:
+                try:
+                    info = fetch_info(self.current_host, self.current_port)
+                    self.add_icons_from_info(info)
+                except Exception:
+                    pass
+            self.load_children(remote_id, next_host, next_port)
+        else:
+            # Fallback: execute via context action helper
+            try:
+                # Position near center of the window
+                pos = self.mapToGlobal(self.rect().center())  # type: ignore[arg-type]
+            except Exception:
+                pos = QtGui.QCursor.pos()
+            try:
+                execute_context_action(self, entry, pos)  # type: ignore[arg-type]
+            except Exception:
+                pass
+
     def on_breadcrumb_clicked(self, index: int) -> None:
         # index 0 is root
         if index <= 0:
@@ -770,13 +851,6 @@ class MainWindow(QtWidgets.QMainWindow):
             target_port = int(target.get("port")) if target.get("port") is not None else self.root_port
         except Exception:
             target_port = self.root_port
-        try:
-            print(
-                f"[DEBUG] UI breadcrumb click: index={index}, target_id={target_id}, remote_id={target_remote_id}, "
-                f"host={target_host}, port={target_port}"
-            )
-        except Exception:
-            pass
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         self.current_host, self.current_port = target_host, target_port
         self.load_children(target_remote_id, target_host, target_port)
