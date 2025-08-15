@@ -460,6 +460,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 try:
                     if seg.startswith("<GroupBy:") and seg.endswith(">"):
                         title = f"Group by {seg[len('<GroupBy:'):-1]}"
+                    elif seg.startswith("<Show:") and seg.endswith(">"):
+                        # Format: <Show:prop:value>
+                        parts = seg[1:-1].split(":", 2)
+                        if len(parts) == 3:
+                            _, prop, value = parts
+                            title = f"Show {prop} = {value}"
+                        else:
+                            title = seg
                 except Exception:
                     pass
                 self.nav_stack.append({
