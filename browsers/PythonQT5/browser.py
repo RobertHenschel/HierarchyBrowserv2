@@ -819,7 +819,23 @@ def main() -> None:
     PROVIDER_PORT = args.port
 
     app = QtWidgets.QApplication([sys.argv[0]] + unknown)
+
+    # Set application icon so it appears in Alt-Tab/task switchers
+    icon = None
+    try:
+        icon_path = _THIS.parent / "Resources" / "Browser.png"
+        if icon_path.exists():
+            icon = QtGui.QIcon(str(icon_path))
+            app.setWindowIcon(icon)
+    except Exception:
+        icon = None
+
     win = MainWindow()
+    try:
+        if icon is not None:
+            win.setWindowIcon(icon)
+    except Exception:
+        pass
     win.show()
     # Optional deep-link navigation
     if isinstance(args.path, str) and args.path:
