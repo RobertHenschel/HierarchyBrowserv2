@@ -310,18 +310,28 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("Hierarchy Browser")
         self.resize(720, 480)
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
-        self.setCentralWidget(splitter)
+        
+        # Top-level layout with breadcrumb spanning full width
+        central = QtWidgets.QWidget(self)
+        self.setCentralWidget(central)
+        root_layout = QtWidgets.QVBoxLayout(central)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        # Left side: breadcrumb + grid in a scroll area
-        left_panel = QtWidgets.QWidget(splitter)
+        # Breadcrumb across the full window width
+        self.breadcrumb = BreadcrumbBar(central)
+        self.breadcrumb.crumbClicked.connect(self.on_breadcrumb_clicked)
+        root_layout.addWidget(self.breadcrumb)
+
+        # Below breadcrumb: horizontal splitter with object view and details
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, central)
+        root_layout.addWidget(splitter)
+
+        # Left side: toolbar + grid in a scroll area
+        left_panel = QtWidgets.QWidget()
         left_layout = QtWidgets.QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(0)
-
-        self.breadcrumb = BreadcrumbBar(left_panel)
-        self.breadcrumb.crumbClicked.connect(self.on_breadcrumb_clicked)
-        left_layout.addWidget(self.breadcrumb)
 
         # Toolbar directly below breadcrumb
         toolbar = ObjectToolbar(left_panel)
