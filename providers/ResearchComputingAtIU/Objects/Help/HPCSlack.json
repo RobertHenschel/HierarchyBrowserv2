@@ -1,0 +1,15 @@
+{
+    "class": "WPUrl",
+    "id": "/Help/HPCSlack",
+    "icon": "./Resources/Slack.png",
+    "title": "HPC Users Slack",
+    "description": "Research Technologies operates a Slack organization for users of Indiana University research supercomputers. If you have an IU email address, you can join IU HPC Users Slack.",
+    "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0024086",
+    "url": "https://iu-hpc-users.slack.com/",
+    "openaction": [
+        {
+            "action": "browser",
+            "url": "https://iu-hpc-users.slack.com/"
+        }
+    ]
+}
