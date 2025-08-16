@@ -111,14 +111,25 @@ class ModulesProvider(ObjectProvider):
             return [WPLmodSearchProgress(
                 id=f"/search_progress/{search_id}",
                 title=f"Searching for '{search_input}'...",
+                state="ongoing",
                 icon=f"./resources/{ICON_PATH.name}",
                 objects=0
             )]
         
-        # Return results if completed
+        # Return results if completed - include a completion progress object
         results = self._search_results.get(search_id, [])
         print(f"DEBUG: Search {search_id} completed, returning {len(results)} results")
-        return results
+        
+        # Add completion progress object so browser knows search is done
+        completion_objects = [WPLmodSearchProgress(
+            id=f"/search_progress/{search_id}",
+            title=f"Search for '{search_input}' completed",
+            state="done",
+            icon=f"./resources/{ICON_PATH.name}",
+            objects=len(results)
+        )]
+        
+        return completion_objects + results
 
     def _run_module_spider(self, search_id: str, search_input: str, recursive: bool) -> None:
         """
