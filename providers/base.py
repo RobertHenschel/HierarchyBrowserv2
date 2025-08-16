@@ -131,7 +131,9 @@ class ObjectProvider(ABC):
             search_handle = incoming.get("search_handle")
             result = self.search(search_input, recursive, search_handle)
             # Return as list of dicts
-            return {"objects": [o.to_dict() if hasattr(o, "to_dict") else o for o in result]}
+            response = {"objects": [o.to_dict() if hasattr(o, "to_dict") else o for o in result]}
+            print(f"DEBUG: Returning search response: {response}")
+            return response
         return {"error": "Unknown message"}
 
     # ---- Abstract data retrieval ----

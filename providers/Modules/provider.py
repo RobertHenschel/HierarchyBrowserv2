@@ -91,7 +91,16 @@ class ModulesProvider(ObjectProvider):
         # Check if search is already completed
         if search_id in self._search_status and self._search_status[search_id] == "done":
             print(f"DEBUG: Search {search_id} already done, returning {len(self._search_results[search_id])} results")
-            return self._search_results[search_id]
+            # Return completion progress object + results
+            results = self._search_results[search_id]
+            completion_objects = [WPLmodSearchProgress(
+                id=f"/search_progress/{search_id}",
+                title=f"Search for '{search_input}' completed",
+                state="done",
+                icon=f"./resources/{ICON_PATH.name}",
+                objects=len(results)
+            )]
+            return completion_objects + results
         
         # If search is not running yet, start it
         if search_id not in self._search_status or self._search_status[search_id] != "running":
@@ -105,7 +114,19 @@ class ModulesProvider(ObjectProvider):
             thread.daemon = True
             thread.start()
         
-        # Return progress object if still running
+        # For initial request (no search_handle), return search handle to trigger async mode
+        if not search_handle:
+            print(f"DEBUG: Initial search request, returning search handle")
+            return [WPLmodSearchHandle(
+                id=search_id,
+                title=f"Searching for '{search_input}'...",
+                search_string=search_input,
+                recursive=recursive,
+                icon=f"./resources/{ICON_PATH.name}",
+                objects=0
+            )]
+        
+        # For polling requests (with search_handle), return progress object if still running
         if self._search_status[search_id] == "running":
             print(f"DEBUG: Search {search_id} still running, returning progress object")
             return [WPLmodSearchProgress(
