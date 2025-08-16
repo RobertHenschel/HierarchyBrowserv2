@@ -1050,7 +1050,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
         
         # Display results
-        self.populate_grid(typed_objects)
+        self.populate_objects(typed_objects)
 
     def on_breadcrumb_clicked(self, index: int) -> None:
         # index 0 is root

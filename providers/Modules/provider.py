@@ -80,17 +80,13 @@ class ModulesProvider(ObjectProvider):
         print(f"DEBUG: Starting search for '{search_input}', recursive={recursive}")
         print(f"DEBUG: search_handle={search_handle}")
         
-        # Generate unique search ID
-        search_id = str(uuid.uuid4())
-        
-        # Initialize search status
-        self._search_status[search_id] = "running"
-        self._search_results[search_id] = []
-        
-        # If we have a search handle with an ID, use that ID instead
+        # Determine search ID - use existing one from handle or generate new one
         if search_handle and isinstance(search_handle, dict) and "id" in search_handle:
             search_id = search_handle["id"]
             print(f"DEBUG: Using existing search_id from handle: {search_id}")
+        else:
+            search_id = str(uuid.uuid4())
+            print(f"DEBUG: Generated new search_id: {search_id}")
         
         # Check if search is already completed
         if search_id in self._search_status and self._search_status[search_id] == "done":
@@ -101,6 +97,7 @@ class ModulesProvider(ObjectProvider):
         if search_id not in self._search_status or self._search_status[search_id] != "running":
             print(f"DEBUG: Starting new search thread for {search_id}")
             self._search_status[search_id] = "running"
+            self._search_results[search_id] = []
             thread = threading.Thread(
                 target=self._run_module_spider,
                 args=(search_id, search_input, recursive)
