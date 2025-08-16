@@ -53,6 +53,10 @@ try:
         WPLmodDependency,
         WPLmodSoftware,
     )  # type: ignore[import-not-found]
+    from providers.Modules.search_objects import (
+        WPLmodSearchHandle,
+        WPLmodSearchProgress,
+    )  # type: ignore[import-not-found]
     from providers.HomeDirectory.model import (
         WPDirectory,
         WPFile,
@@ -68,6 +72,8 @@ except Exception:
     WPSlurmJobGroup = None  # type: ignore[assignment]
     WPLmodDependency = None  # type: ignore[assignment]
     WPLmodSoftware = None  # type: ignore[assignment]
+    WPLmodSearchHandle = None  # type: ignore[assignment]
+    WPLmodSearchProgress = None  # type: ignore[assignment]
     WPDirectory = None  # type: ignore[assignment]
     WPFile = None  # type: ignore[assignment]
     RCIU_WPObject = None  # type: ignore[assignment]
@@ -79,6 +85,60 @@ PROVIDER_PORT = 8888
 # Visual constants for consistent icon layout
 ICON_BOX_PX = 64
 ICON_IMAGE_PX = 48
+
+
+class SearchDialog(QtWidgets.QDialog):
+    """Dialog for entering search parameters."""
+    
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Search")
+        self.setModal(True)
+        self.resize(350, 120)
+        
+        layout = QtWidgets.QVBoxLayout(self)
+        
+        # Search term input
+        search_layout = QtWidgets.QHBoxLayout()
+        search_layout.addWidget(QtWidgets.QLabel("Search for:"))
+        self.search_input = QtWidgets.QLineEdit()
+        self.search_input.setPlaceholderText("Enter search term...")
+        search_layout.addWidget(self.search_input)
+        layout.addLayout(search_layout)
+        
+        # Recursive checkbox
+        self.recursive_checkbox = QtWidgets.QCheckBox("Recursive search")
+        self.recursive_checkbox.setChecked(True)  # Default to recursive
+        layout.addWidget(self.recursive_checkbox)
+        
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
+        
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        search_btn = QtWidgets.QPushButton("Search")
+        search_btn.setDefault(True)
+        search_btn.clicked.connect(self.accept)
+        button_layout.addWidget(search_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Focus on search input
+        self.search_input.setFocus()
+        
+        # Enter key should trigger search
+        self.search_input.returnPressed.connect(self.accept)
+    
+    def get_search_term(self) -> str:
+        """Get the entered search term."""
+        return self.search_input.text().strip()
+    
+    def get_recursive(self) -> bool:
+        """Get the recursive search setting."""
+        return self.recursive_checkbox.isChecked()
 
 
 def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -> List[Any]:
@@ -337,6 +397,8 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar = ObjectToolbar(left_panel)
         toolbar.action_group.setToolTip("Group")
         toolbar.action_group.triggered.connect(self.on_group_action_triggered)
+        toolbar.action_search.setToolTip("Search")
+        toolbar.action_search.triggered.connect(self.on_search_action_triggered)
         toolbar.get_state = lambda: (self.nav_stack, self.current_host, self.current_port)
         left_layout.addWidget(toolbar)
 
@@ -384,6 +446,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_icons_from_info(info)
 
         self.grid_layout = grid_layout
+        
+        # Add keyboard shortcut for search (Ctrl+F)
+        search_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+F"), self)
+        search_shortcut.activated.connect(self.on_search_action_triggered)
+        
         self.load_root(self.root_host, self.root_port)
 
     def navigate_to_path(self, full_path: str) -> None:
@@ -502,6 +569,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 current_id = target_remote
                 self.load_children(current_id, self.current_host, self.current_port)
                 continue
+
+            # Search token like Search:yes:searchstring or Search:no:searchstring
+            if seg.startswith("Search:") and len(seg.split(":")) == 3:
+                parts = seg.split(":", 2)
+                recursive_str = parts[1].lower()
+                search_string = parts[2]
+                recursive = recursive_str == "yes"
+                
+                # Perform search
+                self.perform_search(search_string, recursive, current_id)
+                break
 
             # Normal path segment: traverse
             data = fetch_objects_for_id(current_id, self.current_host, self.current_port)
@@ -734,6 +812,15 @@ class MainWindow(QtWidgets.QMainWindow):
             action.triggered.connect(lambda _=False, p=prop: self._group_by_property(p))
         menu.exec_(QtGui.QCursor.pos())
 
+    def on_search_action_triggered(self) -> None:
+        """Show search dialog and perform search."""
+        search_dialog = SearchDialog(self)
+        if search_dialog.exec_() == QtWidgets.QDialog.Accepted:
+            search_term = search_dialog.get_search_term()
+            recursive = search_dialog.get_recursive()
+            if search_term:
+                self.perform_search(search_term, recursive)
+
     def _group_by_property(self, prop: str) -> None:
         base_path = self._get_current_path()
         target_path = base_path.rstrip("/") + f"/<GroupBy:{prop}>"
@@ -829,6 +916,141 @@ class MainWindow(QtWidgets.QMainWindow):
                 execute_context_action(self, entry, pos)  # type: ignore[arg-type]
             except Exception:
                 pass
+
+    def perform_search(self, search_string: str, recursive: bool, base_id: str = "/") -> None:
+        """Perform a search operation using the Search protocol."""
+        search_payload = {
+            "method": "Search",
+            "id": base_id,
+            "search": search_string,
+            "recursive": recursive
+        }
+        
+        try:
+            response = self.send_search_request(search_payload)
+            objects = response.get("objects", [])
+            
+            if not objects:
+                # No search support - show message and don't change breadcrumb
+                QtWidgets.QMessageBox.information(
+                    self, 
+                    "Search Not Supported", 
+                    "Search is not supported by this provider."
+                )
+                return
+            
+            # Check if first object is a search handle
+            first_obj = objects[0] if objects else {}
+            if isinstance(first_obj, dict) and first_obj.get("class") == "WPLmodSearchHandle":
+                # Start async search with progress dialog
+                self.start_async_search(search_payload, search_string, recursive)
+            else:
+                # Immediate results
+                self.display_search_results(objects, search_string, recursive)
+                
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(
+                self, 
+                "Search Error", 
+                f"Search failed: {str(e)}"
+            )
+
+    def send_search_request(self, payload: dict) -> dict:
+        """Send a search request to the current provider."""
+        message = json.dumps(payload, separators=(",", ":")) + "\n"
+        with socket.create_connection((self.current_host, self.current_port), timeout=5) as s:
+            s.sendall(message.encode("utf-8"))
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(16384)
+                if not chunk:
+                    break
+                buf += chunk
+        if not buf:
+            return {}
+        return json.loads(buf.decode("utf-8").strip())
+
+    def start_async_search(self, search_payload: dict, search_string: str, recursive: bool) -> None:
+        """Start an asynchronous search with progress dialog."""
+        # Create progress dialog
+        progress_dialog = QtWidgets.QProgressDialog(
+            f"Searching for '{search_string}'...", 
+            "Cancel", 
+            0, 0, 
+            self
+        )
+        progress_dialog.setWindowModality(QtCore.Qt.WindowModal)
+        progress_dialog.setMinimumDuration(0)
+        progress_dialog.show()
+        
+        # Get search handle from first response
+        first_response = self.send_search_request(search_payload)
+        objects = first_response.get("objects", [])
+        search_handle = objects[0] if objects else {}
+        
+        if not isinstance(search_handle, dict) or search_handle.get("class") != "WPLmodSearchHandle":
+            progress_dialog.close()
+            return
+            
+        # Create timer for polling
+        self.search_timer = QtCore.QTimer()
+        self.search_results: List[Any] = []
+        
+        def check_search_progress():
+            if progress_dialog.wasCanceled():
+                self.search_timer.stop()
+                return
+                
+            try:
+                # Send search request with handle
+                poll_payload = search_payload.copy()
+                poll_payload["search_handle"] = search_handle
+                response = self.send_search_request(poll_payload)
+                objects = response.get("objects", [])
+                
+                # Find progress object
+                progress_obj = None
+                result_objects = []
+                for obj in objects:
+                    if isinstance(obj, dict) and obj.get("class") == "WPLmodSearchProgress":
+                        progress_obj = obj
+                    else:
+                        result_objects.append(obj)
+                
+                # Add new results
+                self.search_results.extend(result_objects)
+                
+                if progress_obj and progress_obj.get("state") == "done":
+                    # Search complete
+                    self.search_timer.stop()
+                    progress_dialog.close()
+                    self.display_search_results(self.search_results, search_string, recursive)
+                    
+            except Exception:
+                self.search_timer.stop()
+                progress_dialog.close()
+        
+        self.search_timer.timeout.connect(check_search_progress)
+        self.search_timer.start(1000)  # Check every second
+
+    def display_search_results(self, objects: List[Any], search_string: str, recursive: bool) -> None:
+        """Display search results in the browser."""
+        # Convert to typed objects
+        typed_objects = _to_typed_objects(objects)
+        
+        # Update breadcrumb with search info
+        search_title = f"Search {'(recursive)' if recursive else ''} '{search_string}'"
+        self.nav_stack.append({
+            "id": f"/search/{search_string}",
+            "title": search_title,
+            "host": self.current_host,
+            "port": str(self.current_port),
+            "remote_id": f"/search/{search_string}"
+        })
+        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        
+        # Display results
+        self.populate_objects(typed_objects)
 
     def on_breadcrumb_clicked(self, index: int) -> None:
         # index 0 is root
@@ -946,6 +1168,25 @@ def _to_typed_objects(raw_objects: List[Dict[str, Any]]) -> List[Any]:
                     title=str(obj.get("title", "")),
                     icon=obj.get("icon"),
                     objects=int(obj.get("objects", 0)),
+                )
+                typed.append(inst)
+            elif cls_name == "WPLmodSearchHandle" and WPLmodSearchHandle is not None:
+                inst = WPLmodSearchHandle(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                    search_string=str(obj.get("search_string", "")),
+                    recursive=bool(obj.get("recursive", True)),
+                )
+                typed.append(inst)
+            elif cls_name == "WPLmodSearchProgress" and WPLmodSearchProgress is not None:
+                inst = WPLmodSearchProgress(
+                    id=str(obj.get("id", "")),
+                    title=str(obj.get("title", "")),
+                    icon=obj.get("icon"),
+                    objects=int(obj.get("objects", 0)),
+                    state=str(obj.get("state", "ongoing")),
                 )
                 typed.append(inst)
             elif cls_name == "WPGroup" and WPGroup is not None:
