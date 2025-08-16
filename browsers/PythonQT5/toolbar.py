@@ -39,6 +39,19 @@ class ObjectToolbar(QtWidgets.QToolBar):
             btn2.setFixedSize(25, 25)
             btn2.setIconSize(QtCore.QSize(25, 25))
 
+        # Spacer between icons
+        spacer = QtWidgets.QWidget(self)
+        spacer.setFixedWidth(8)
+        self.addWidget(spacer)
+        
+        # Search button
+        search_icon = QtGui.QIcon("./Resources/Group.png")  # Reuse existing icon for now
+        self.action_search = self.addAction(search_icon, "Search")
+        btn3 = self.widgetForAction(self.action_search)
+        if isinstance(btn3, QtWidgets.QToolButton):
+            btn3.setFixedSize(25, 25)
+            btn3.setIconSize(QtCore.QSize(25, 25))
+
         # Callback to obtain navigation state from host window: (nav_stack, host, port)
         self.get_state: Optional[Callable[[], Tuple[List[Dict[str, str]], str, int]]] = None
         self.action_link.triggered.connect(self._on_create_shortcut)

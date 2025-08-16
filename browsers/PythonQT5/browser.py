@@ -87,6 +87,60 @@ ICON_BOX_PX = 64
 ICON_IMAGE_PX = 48
 
 
+class SearchDialog(QtWidgets.QDialog):
+    """Dialog for entering search parameters."""
+    
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Search")
+        self.setModal(True)
+        self.resize(350, 120)
+        
+        layout = QtWidgets.QVBoxLayout(self)
+        
+        # Search term input
+        search_layout = QtWidgets.QHBoxLayout()
+        search_layout.addWidget(QtWidgets.QLabel("Search for:"))
+        self.search_input = QtWidgets.QLineEdit()
+        self.search_input.setPlaceholderText("Enter search term...")
+        search_layout.addWidget(self.search_input)
+        layout.addLayout(search_layout)
+        
+        # Recursive checkbox
+        self.recursive_checkbox = QtWidgets.QCheckBox("Recursive search")
+        self.recursive_checkbox.setChecked(True)  # Default to recursive
+        layout.addWidget(self.recursive_checkbox)
+        
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
+        
+        cancel_btn = QtWidgets.QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+        
+        search_btn = QtWidgets.QPushButton("Search")
+        search_btn.setDefault(True)
+        search_btn.clicked.connect(self.accept)
+        button_layout.addWidget(search_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Focus on search input
+        self.search_input.setFocus()
+        
+        # Enter key should trigger search
+        self.search_input.returnPressed.connect(self.accept)
+    
+    def get_search_term(self) -> str:
+        """Get the entered search term."""
+        return self.search_input.text().strip()
+    
+    def get_recursive(self) -> bool:
+        """Get the recursive search setting."""
+        return self.recursive_checkbox.isChecked()
+
+
 def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -> List[Any]:
     h = host or PROVIDER_HOST
     p = port or PROVIDER_PORT
@@ -343,6 +397,8 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar = ObjectToolbar(left_panel)
         toolbar.action_group.setToolTip("Group")
         toolbar.action_group.triggered.connect(self.on_group_action_triggered)
+        toolbar.action_search.setToolTip("Search")
+        toolbar.action_search.triggered.connect(self.on_search_action_triggered)
         toolbar.get_state = lambda: (self.nav_stack, self.current_host, self.current_port)
         left_layout.addWidget(toolbar)
 
@@ -390,6 +446,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_icons_from_info(info)
 
         self.grid_layout = grid_layout
+        
+        # Add keyboard shortcut for search (Ctrl+F)
+        search_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+F"), self)
+        search_shortcut.activated.connect(self.on_search_action_triggered)
+        
         self.load_root(self.root_host, self.root_port)
 
     def navigate_to_path(self, full_path: str) -> None:
@@ -750,6 +811,15 @@ class MainWindow(QtWidgets.QMainWindow):
             action = menu.addAction(prop)
             action.triggered.connect(lambda _=False, p=prop: self._group_by_property(p))
         menu.exec_(QtGui.QCursor.pos())
+
+    def on_search_action_triggered(self) -> None:
+        """Show search dialog and perform search."""
+        search_dialog = SearchDialog(self)
+        if search_dialog.exec_() == QtWidgets.QDialog.Accepted:
+            search_term = search_dialog.get_search_term()
+            recursive = search_dialog.get_recursive()
+            if search_term:
+                self.perform_search(search_term, recursive)
 
     def _group_by_property(self, prop: str) -> None:
         base_path = self._get_current_path()

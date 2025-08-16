@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import subprocess
 import sys
 import threading
@@ -128,17 +129,23 @@ class ModulesProvider(ObjectProvider):
         Run 'module spider' command and parse results into WPLmodSoftware objects.
         """
         try:
-            # Run module spider command
-            # Note: module output goes to stderr, not stdout
+            # The 'module' command is a shell function, not a binary. We need to run it through the shell.
+            # Use stderr redirect to stdout as shown by user: module spider python 2>&1
+            command = f"module spider {search_input} 2>&1"
+            
+            # Run through shell to access the module function
             result = subprocess.run(
-                ["module", "spider", search_input],
+                command,
+                shell=True,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=30,
+                env=os.environ.copy(),  # Ensure environment variables are passed
+                executable="/bin/bash"   # Use bash explicitly
             )
             
-            # Parse the output (comes from stderr)
-            software_list = self._parse_module_spider_output(result.stderr, search_input)
+            # Parse the output (now comes from stdout due to 2>&1 redirect)
+            software_list = self._parse_module_spider_output(result.stdout, search_input)
             
             # Store results
             self._search_results[search_id] = software_list
@@ -153,6 +160,22 @@ class ModulesProvider(ObjectProvider):
     def _parse_module_spider_output(self, output: str, search_input: str) -> List[WPLmodSoftware]:
         """
         Parse module spider output to extract software modules.
+        LMOD spider output looks like:
+        
+        -----------------------------------------------------------------------------------------------------------------------------------------
+          python:
+        -----------------------------------------------------------------------------------------------------------------------------------------
+            Description:
+              Specifically for use on GPU nodes, The Deep Learning software stack...
+        
+             Versions:
+                python/gpu/3.10.10
+                python/gpu/3.11.5
+                python/3.11.4
+                python/3.12.4
+                python/3.13.5
+             Other possible modules matches:
+                spyder/python3.12  spyder/python3.13  vibrant/python3.7  wxpython
         """
         software_list: List[WPLmodSoftware] = []
         icon_name = f"./resources/{SOFTWARE_ICON_PATH.name}"
@@ -160,31 +183,88 @@ class ModulesProvider(ObjectProvider):
         if not output:
             return software_list
             
-        # Module spider output format varies, but typically shows module names
-        # Let's look for lines that contain module names
         lines = output.split('\n')
+        i = 0
+        in_versions_section = False
+        in_other_matches_section = False
         
-        for line in lines:
-            line = line.strip()
+        while i < len(lines):
+            line = lines[i].strip()
+            i += 1
+            
             if not line:
                 continue
                 
-            # Skip header/informational lines
-            if any(skip in line.lower() for skip in ["the following", "use", "where:", "help", "versions:"]):
+            # Skip separator lines
+            if line.startswith('-' * 10):
                 continue
                 
-            # Look for module names (typically start with a letter/number and contain version info)
-            if search_input.lower() in line.lower():
-                # Extract module name (before any description or version info)
-                module_name = line.split()[0] if line.split() else line
+            # Check for Versions section
+            if line.lower().strip().startswith("versions:"):
+                in_versions_section = True
+                in_other_matches_section = False
+                continue
                 
-                # Clean up module name
-                module_name = module_name.strip('.:-()')
+            # Check for Other possible modules matches section
+            if "other possible modules matches:" in line.lower():
+                in_versions_section = False
+                in_other_matches_section = True
+                continue
                 
-                if module_name and len(module_name) > 0:
+            # End sections when we hit explanatory text or commands
+            if any(marker in line.lower() for marker in [
+                "to find other possible", "for detailed information", 
+                "note that names", "for example:", "$ module"
+            ]):
+                in_versions_section = False
+                in_other_matches_section = False
+                continue
+            
+            # Parse versions section - these are the full module names
+            if in_versions_section and line and not line.lower().startswith('description:'):
+                # Look for module names like "python/gpu/3.10.10" or "python/3.11.4"
+                # Split by whitespace and check each token
+                tokens = line.split()
+                for token in tokens:
+                    # Only include tokens that look like module names (contain / or match search exactly)
+                    if ('/' in token and search_input.lower() in token.lower()) or token.lower() == search_input.lower():
+                        # Skip tokens that look like commands or paths starting with special chars
+                        if not token.startswith(('$', '#', '/', '.', '-')) and len(token) > 1:
+                            software = WPLmodSoftware(
+                                id=f"/search/{token}",
+                                title=token,
+                                icon=icon_name,
+                                objects=0
+                            )
+                            software_list.append(software)
+            
+            # Parse other matches section - these might be related modules
+            elif in_other_matches_section and line:
+                tokens = line.split()
+                for token in tokens:
+                    # Include if it contains our search term and looks like a module name
+                    if (search_input.lower() in token.lower() and 
+                        not token.startswith(('$', '#', '/', '.', '-', '(', ')')) and
+                        len(token) > 1 and
+                        not token.lower() in ['the', 'and', 'or', 'with', 'for', 'to', 'of', 'in', 'on']):
+                        software = WPLmodSoftware(
+                            id=f"/search/{token}",
+                            title=token,
+                            icon=icon_name,
+                            objects=0
+                        )
+                        software_list.append(software)
+            
+            # Also look for main module header (like "python:")
+            elif (line.endswith(':') and 
+                  search_input.lower() in line.lower() and 
+                  not in_versions_section and 
+                  not in_other_matches_section):
+                module_base = line[:-1].strip()
+                if module_base and module_base.lower() == search_input.lower():
                     software = WPLmodSoftware(
-                        id=f"/search/{module_name}",
-                        title=module_name,
+                        id=f"/search/{module_base}",
+                        title=module_base,
                         icon=icon_name,
                         objects=0
                     )
