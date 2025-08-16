@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 import argparse
+import subprocess
 import sys
+import threading
+import time
+import uuid
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 # Allow running this file directly: add project root to sys.path
 _THIS = Path(__file__).resolve()
@@ -14,11 +18,14 @@ if str(_PROJECT_ROOT) not in sys.path:
 from providers.base import ObjectProvider, ProviderOptions
 try:
     from providers.Modules.model import WPLmodDependency, WPLmodSoftware  # type: ignore[import-not-found]
+    from providers.Modules.search_objects import WPLmodSearchHandle, WPLmodSearchProgress  # type: ignore[import-not-found]
 except Exception:
     try:
         from .model import WPLmodDependency, WPLmodSoftware  # type: ignore[no-redef]
+        from .search_objects import WPLmodSearchHandle, WPLmodSearchProgress  # type: ignore[no-redef]
     except Exception:
         from model import WPLmodDependency, WPLmodSoftware  # type: ignore[no-redef]
+        from search_objects import WPLmodSearchHandle, WPLmodSearchProgress  # type: ignore[no-redef]
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
@@ -59,6 +66,139 @@ def _count_module_children(base: Path) -> int:
 
 
 class ModulesProvider(ObjectProvider):
+    def __init__(self, options: ProviderOptions) -> None:
+        super().__init__(options)
+        # Track ongoing searches
+        self._search_results: Dict[str, List[WPLmodSoftware]] = {}
+        self._search_status: Dict[str, str] = {}  # 'ongoing' or 'done'
+
+    def search(self, search_input: str, recursive: bool = True, search_handle: Optional[dict] = None) -> list:
+        """
+        Search for modules using 'module spider'. Always returns a search handle object first,
+        then processes results asynchronously.
+        """
+        if search_handle is not None:
+            # This is a status check for an existing search
+            handle_id = search_handle.get("id", "")
+            if handle_id in self._search_status:
+                status = self._search_status[handle_id]
+                results = self._search_results.get(handle_id, [])
+                
+                # Always include progress object
+                progress = WPLmodSearchProgress(
+                    id=handle_id,
+                    title=f"Search progress for '{search_input}'",
+                    icon=f"./resources/{SOFTWARE_ICON_PATH.name}",
+                    objects=0,
+                    state=status
+                )
+                
+                # Return results + progress
+                return results + [progress]
+            else:
+                # Unknown search handle
+                return []
+        
+        # New search request - create search handle and start async search
+        search_id = str(uuid.uuid4())
+        self._search_status[search_id] = "ongoing"
+        self._search_results[search_id] = []
+        
+        # Start search in background thread
+        search_thread = threading.Thread(
+            target=self._run_module_spider,
+            args=(search_id, search_input, recursive)
+        )
+        search_thread.daemon = True
+        search_thread.start()
+        
+        # Return search handle object
+        handle = WPLmodSearchHandle(
+            id=search_id,
+            title=f"Searching for '{search_input}'...",
+            icon=f"./resources/{ICON_PATH.name}",
+            objects=0,
+            search_string=search_input,
+            recursive=recursive
+        )
+        return [handle]
+
+    def _run_module_spider(self, search_id: str, search_input: str, recursive: bool) -> None:
+        """
+        Run 'module spider' command and parse results into WPLmodSoftware objects.
+        """
+        try:
+            # Run module spider command
+            # Note: module output goes to stderr, not stdout
+            result = subprocess.run(
+                ["module", "spider", search_input],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # Parse the output (comes from stderr)
+            software_list = self._parse_module_spider_output(result.stderr, search_input)
+            
+            # Store results
+            self._search_results[search_id] = software_list
+            self._search_status[search_id] = "done"
+            
+        except Exception as e:
+            # On error, still mark as done but with empty results
+            print(f"Error running module spider: {e}")
+            self._search_results[search_id] = []
+            self._search_status[search_id] = "done"
+
+    def _parse_module_spider_output(self, output: str, search_input: str) -> List[WPLmodSoftware]:
+        """
+        Parse module spider output to extract software modules.
+        """
+        software_list: List[WPLmodSoftware] = []
+        icon_name = f"./resources/{SOFTWARE_ICON_PATH.name}"
+        
+        if not output:
+            return software_list
+            
+        # Module spider output format varies, but typically shows module names
+        # Let's look for lines that contain module names
+        lines = output.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Skip header/informational lines
+            if any(skip in line.lower() for skip in ["the following", "use", "where:", "help", "versions:"]):
+                continue
+                
+            # Look for module names (typically start with a letter/number and contain version info)
+            if search_input.lower() in line.lower():
+                # Extract module name (before any description or version info)
+                module_name = line.split()[0] if line.split() else line
+                
+                # Clean up module name
+                module_name = module_name.strip('.:-()')
+                
+                if module_name and len(module_name) > 0:
+                    software = WPLmodSoftware(
+                        id=f"/search/{module_name}",
+                        title=module_name,
+                        icon=icon_name,
+                        objects=0
+                    )
+                    software_list.append(software)
+        
+        # Remove duplicates based on title
+        seen = set()
+        unique_software = []
+        for sw in software_list:
+            if sw.title not in seen:
+                seen.add(sw.title)
+                unique_software.append(sw)
+                
+        return unique_software[:50]  # Limit to 50 results
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         names = _list_lmod_top_dirs()
         icon_name = f"./resources/{ICON_PATH.name}"

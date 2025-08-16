@@ -29,6 +29,13 @@ class ObjectProvider(ABC):
     Subclasses implement data retrieval methods.
     """
 
+    def search(self, search_input: str, recursive: bool = True, search_handle: Optional[dict] = None) -> list:
+        """
+        Search for objects matching the search_input. By default, returns an empty list.
+        All providers support this method, but only some implement it.
+        """
+        return []
+
     # ---- Protocol helpers (class-level, shared) ----
     @staticmethod
     def is_get_root_objects(message: Any) -> bool:
@@ -116,6 +123,15 @@ class ObjectProvider(ABC):
                 return self.get_objects_for_path(object_id)
             except Exception as exc:  # pragma: no cover - defensive
                 return {"error": f"Failed to list objects: {exc}"}
+        # Support search protocol
+        if isinstance(incoming, dict) and incoming.get("method") == "Search":
+            object_id = incoming.get("id", "/")
+            search_input = str(incoming.get("search", ""))
+            recursive = bool(incoming.get("recursive", True))
+            search_handle = incoming.get("search_handle")
+            result = self.search(search_input, recursive, search_handle)
+            # Return as list of dicts
+            return {"objects": [o.to_dict() if hasattr(o, "to_dict") else o for o in result]}
         return {"error": "Unknown message"}
 
     # ---- Abstract data retrieval ----
