@@ -1,0 +1,14 @@
+{
+    "class": "WPUrl",
+    "id": "/Help/RTWebForm",
+    "icon": "./Resources/Webform.png",
+    "title": "Contact Research Technologies",
+    "description": "Contact Research Technologies for help with your research computing needs.",
+    "url": "https://projects.rt.iu.edu/help/?queue=hps",
+    "openaction": [
+        {
+            "action": "browser",
+            "url": "https://projects.rt.iu.edu/help/?queue=hps"
+        }
+    ]
+}

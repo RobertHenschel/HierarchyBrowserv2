@@ -1,0 +1,14 @@
+{
+    "class": "WPUrl",
+    "id": "/DataStorage/DataStorageFinder",
+    "icon": "./Resources/Data.png",
+    "title": "Data Storage Finder",
+    "description": "Data Storage Finder is a tool for finding data storage systems at Indiana University.",
+    "url": "https://datastoragefinder.iu.edu/",
+    "openaction": [
+        {
+            "action": "browser",
+            "url": "https://datastoragefinder.iu.edu/"
+        }
+    ]
+}

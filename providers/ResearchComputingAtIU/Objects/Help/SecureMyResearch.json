@@ -1,0 +1,14 @@
+{
+    "class": "WPUrl",
+    "id": "/Help/SecureMyResearch",
+    "icon": "./Resources/Security.png",
+    "title": "SecureMyResearch",
+    "description": "SecureMyResearch provides you with consulting and resources to help you protect research data and comply with cybersecurity requirements in grants, contracts, and data use agreements.",
+    "url": "https://cacr.iu.edu/initiatives/secure-my-research.html",
+    "openaction": [
+        {
+            "action": "browser",
+            "url": "https://cacr.iu.edu/initiatives/secure-my-research.html"
+        }
+    ]
+}

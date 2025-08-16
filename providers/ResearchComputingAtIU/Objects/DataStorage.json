@@ -1,6 +1,6 @@
 {
     "class": "WPObject",
-    "id": "/StorageSystems",
+    "id": "/DataStorage",
     "icon": "./Resources/Storage.png",
-    "title": "Storage Systems"
+    "title": "Data Storage"
 }

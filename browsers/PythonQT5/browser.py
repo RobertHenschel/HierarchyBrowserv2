@@ -774,7 +774,6 @@ class MainWindow(QtWidgets.QMainWindow):
         - action == "objectbrowser": switch to target provider and load its root
         - any other actions: delegated to execute_context_action
         """
-        print(f"[DEBUG] Performing openaction: {obj}")
         if not isinstance(obj, dict):
             return
         open_action = obj.get("openaction")
