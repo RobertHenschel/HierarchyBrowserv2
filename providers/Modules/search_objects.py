@@ -15,6 +15,12 @@ class WPLmodSearchHandle(ProviderObject):
     @property
     def class_name(self) -> str:
         return "WPLmodSearchHandle"
+    
+    def _extra_fields(self) -> dict:
+        return {
+            "search_string": self.search_string,
+            "recursive": self.recursive
+        }
 
 @dataclass
 class WPLmodSearchProgress(ProviderObject):
@@ -27,3 +33,6 @@ class WPLmodSearchProgress(ProviderObject):
     @property
     def class_name(self) -> str:
         return "WPLmodSearchProgress"
+    
+    def _extra_fields(self) -> dict:
+        return {"state": self.state}
