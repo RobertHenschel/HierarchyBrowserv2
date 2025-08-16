@@ -114,7 +114,7 @@ class ModulesProvider(ObjectProvider):
             return [WPLmodSearchProgress(
                 id=f"/search_progress/{search_id}",
                 title=f"Searching for '{search_input}'...",
-                icon=f"./resources/{BOX_ICON_PATH.name}",
+                icon=f"./resources/{ICON_PATH.name}",
                 objects=0
             )]
         
