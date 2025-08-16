@@ -73,65 +73,66 @@ class ModulesProvider(ObjectProvider):
         self._search_results: Dict[str, List[WPLmodSoftware]] = {}
         self._search_status: Dict[str, str] = {}  # 'ongoing' or 'done'
 
-    def search(self, search_input: str, recursive: bool = True, search_handle: Optional[dict] = None) -> list:
+    def search(self, search_input: str, recursive: bool = True, search_handle: Optional[dict] = None) -> List[WPLmodSoftware]:
         """
-        Search for modules using 'module spider'. Always returns a search handle object first,
-        then processes results asynchronously.
+        Search for software modules using 'module spider'.
         """
-        if search_handle is not None:
-            # This is a status check for an existing search
-            handle_id = search_handle.get("id", "")
-            if handle_id in self._search_status:
-                status = self._search_status[handle_id]
-                results = self._search_results.get(handle_id, [])
-                
-                # Always include progress object
-                progress = WPLmodSearchProgress(
-                    id=handle_id,
-                    title=f"Search progress for '{search_input}'",
-                    icon=f"./resources/{SOFTWARE_ICON_PATH.name}",
-                    objects=0,
-                    state=status
-                )
-                
-                # Return results + progress
-                return results + [progress]
-            else:
-                # Unknown search handle
-                return []
+        print(f"DEBUG: Starting search for '{search_input}', recursive={recursive}")
+        print(f"DEBUG: search_handle={search_handle}")
         
-        # New search request - create search handle and start async search
+        # Generate unique search ID
         search_id = str(uuid.uuid4())
-        self._search_status[search_id] = "ongoing"
+        
+        # Initialize search status
+        self._search_status[search_id] = "running"
         self._search_results[search_id] = []
         
-        # Start search in background thread
-        search_thread = threading.Thread(
-            target=self._run_module_spider,
-            args=(search_id, search_input, recursive)
-        )
-        search_thread.daemon = True
-        search_thread.start()
+        # If we have a search handle with an ID, use that ID instead
+        if search_handle and isinstance(search_handle, dict) and "id" in search_handle:
+            search_id = search_handle["id"]
+            print(f"DEBUG: Using existing search_id from handle: {search_id}")
         
-        # Return search handle object
-        handle = WPLmodSearchHandle(
-            id=search_id,
-            title=f"Searching for '{search_input}'...",
-            icon=f"./resources/{ICON_PATH.name}",
-            objects=0,
-            search_string=search_input,
-            recursive=recursive
-        )
-        return [handle]
+        # Check if search is already completed
+        if search_id in self._search_status and self._search_status[search_id] == "done":
+            print(f"DEBUG: Search {search_id} already done, returning {len(self._search_results[search_id])} results")
+            return self._search_results[search_id]
+        
+        # If search is not running yet, start it
+        if search_id not in self._search_status or self._search_status[search_id] != "running":
+            print(f"DEBUG: Starting new search thread for {search_id}")
+            self._search_status[search_id] = "running"
+            thread = threading.Thread(
+                target=self._run_module_spider,
+                args=(search_id, search_input, recursive)
+            )
+            thread.daemon = True
+            thread.start()
+        
+        # Return progress object if still running
+        if self._search_status[search_id] == "running":
+            print(f"DEBUG: Search {search_id} still running, returning progress object")
+            return [WPLmodSearchProgress(
+                id=f"/search_progress/{search_id}",
+                title=f"Searching for '{search_input}'...",
+                icon=f"./resources/{BOX_ICON_PATH.name}",
+                objects=0
+            )]
+        
+        # Return results if completed
+        results = self._search_results.get(search_id, [])
+        print(f"DEBUG: Search {search_id} completed, returning {len(results)} results")
+        return results
 
     def _run_module_spider(self, search_id: str, search_input: str, recursive: bool) -> None:
         """
         Run 'module spider' command and parse results into WPLmodSoftware objects.
         """
+        print(f"DEBUG: _run_module_spider starting for search_id={search_id}, search_input='{search_input}'")
         try:
             # The 'module' command is a shell function, not a binary. We need to run it through the shell.
             # Use stderr redirect to stdout as shown by user: module spider python 2>&1
             command = f"module spider {search_input} 2>&1"
+            print(f"DEBUG: Running command: {command}")
             
             # Run through shell to access the module function
             result = subprocess.run(
@@ -144,16 +145,24 @@ class ModulesProvider(ObjectProvider):
                 executable="/bin/bash"   # Use bash explicitly
             )
             
+            print(f"DEBUG: Command completed. Exit code: {result.returncode}")
+            print(f"DEBUG: Stdout length: {len(result.stdout)}")
+            print(f"DEBUG: Stderr length: {len(result.stderr)}")
+            if result.stdout:
+                print(f"DEBUG: First 200 chars of stdout: {result.stdout[:200]}...")
+            
             # Parse the output (now comes from stdout due to 2>&1 redirect)
             software_list = self._parse_module_spider_output(result.stdout, search_input)
+            print(f"DEBUG: Parsed {len(software_list)} software items")
             
             # Store results
             self._search_results[search_id] = software_list
             self._search_status[search_id] = "done"
+            print(f"DEBUG: Search {search_id} marked as done")
             
         except Exception as e:
             # On error, still mark as done but with empty results
-            print(f"Error running module spider: {e}")
+            print(f"DEBUG: Error running module spider: {e}")
             self._search_results[search_id] = []
             self._search_status[search_id] = "done"
 
