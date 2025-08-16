@@ -1,12 +1,16 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 from providers.base import ProviderObject
 
 
 @dataclass
 class WPLmodSearchHandle(ProviderObject):
     id: str
-    search_string: str
+    title: str
+    search_string: str = ""
     recursive: bool = True
+    icon: Optional[str] = None
+    objects: int = 0
 
     @property
     def class_name(self) -> str:
@@ -15,7 +19,10 @@ class WPLmodSearchHandle(ProviderObject):
 @dataclass
 class WPLmodSearchProgress(ProviderObject):
     id: str
-    state: str  # 'ongoing' or 'done'
+    title: str
+    state: str = "ongoing"  # 'ongoing' or 'done'
+    icon: Optional[str] = None
+    objects: int = 0
 
     @property
     def class_name(self) -> str:
