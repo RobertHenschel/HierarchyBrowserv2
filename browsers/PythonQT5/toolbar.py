@@ -17,7 +17,7 @@ class ObjectToolbar(QtWidgets.QToolBar):
         self.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
         self.setStyleSheet("QToolBar{spacing:0; margin:0; padding:0; border:0;} QToolButton{margin:0; padding:0; border:0;}")
         self.setContentsMargins(0, 0, 0, 0)
-        self.setFixedHeight(25)
+        self.setFixedHeight(30)
 
         # Group button
         spacer = QtWidgets.QWidget(self)
@@ -26,8 +26,8 @@ class ObjectToolbar(QtWidgets.QToolBar):
         self.action_group = self.addAction(QtGui.QIcon("./Resources/Group.png"), "Group")
         btn = self.widgetForAction(self.action_group)
         if isinstance(btn, QtWidgets.QToolButton):
-            btn.setFixedSize(25, 25)
-            btn.setIconSize(QtCore.QSize(25, 25))
+            btn.setFixedSize(22, 22)
+            btn.setIconSize(QtCore.QSize(22, 22))
         # Spacer between icons
         spacer = QtWidgets.QWidget(self)
         spacer.setFixedWidth(8)
@@ -36,8 +36,8 @@ class ObjectToolbar(QtWidgets.QToolBar):
         self.action_link = self.addAction(QtGui.QIcon("./Resources/Link.png"), "Link")
         btn2 = self.widgetForAction(self.action_link)
         if isinstance(btn2, QtWidgets.QToolButton):
-            btn2.setFixedSize(25, 25)
-            btn2.setIconSize(QtCore.QSize(25, 25))
+            btn2.setFixedSize(22, 22)
+            btn2.setIconSize(QtCore.QSize(22, 22))
 
         # Callback to obtain navigation state from host window: (nav_stack, host, port)
         self.get_state: Optional[Callable[[], Tuple[List[Dict[str, str]], str, int]]] = None

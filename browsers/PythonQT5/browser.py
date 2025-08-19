@@ -173,8 +173,8 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     painter = QtGui.QPainter(composed)
     painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
-    diameter = max(14, int(min(composed.width(), composed.height()) * 0.35))
-    margin = max(2, int(diameter * 0.1))
+    diameter = max(22, int(min(composed.width(), composed.height()) * 0.35))
+    margin = 0 # max(2, int(diameter * 0.1))
     x = composed.width() - diameter - margin
     y = composed.height() - diameter - margin
 
@@ -188,7 +188,7 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     font = painter.font()
     font.setBold(True)
     # Scale font relative to badge; tweak for readability
-    font.setPointSizeF(max(7.0, diameter * 0.45))
+    font.setPointSizeF(max(9.0, diameter * 0.50))
     painter.setFont(font)
     text = str(count if count < 100 else "99+")
     painter.drawText(QtCore.QRectF(x, y, diameter, diameter), QtCore.Qt.AlignCenter, text)
