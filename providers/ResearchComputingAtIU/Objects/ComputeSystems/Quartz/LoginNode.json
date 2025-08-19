@@ -2,7 +2,7 @@
     "class": "WPLoginNode",
     "id": "/ComputeSystems/Quartz/LoginNode",
     "icon": "./Resources/Bash.png",
-    "title": "SSH Login Node",
+    "title": "Login Node",
     "description": "The login node for SSH access to Quartz.",
     "sshaccesshostname": "quartz.uits.iu.edu",
     "openaction": [

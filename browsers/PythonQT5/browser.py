@@ -309,7 +309,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Hierarchy Browser")
-        self.resize(720, 480)
+        self.resize(820, 480)
         
         # Top-level layout with breadcrumb spanning full width
         central = QtWidgets.QWidget(self)
@@ -367,7 +367,7 @@ class MainWindow(QtWidgets.QMainWindow):
         splitter.addWidget(self.details_panel)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
-        splitter.setSizes([500, 300])
+        splitter.setSizes([600, 300])
 
         # Fetch info for root name and icons, then populate
         info = {}

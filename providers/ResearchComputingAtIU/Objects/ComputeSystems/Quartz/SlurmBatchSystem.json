@@ -2,7 +2,7 @@
     "class": "WPSlurmBatchSystem",
     "id": "/ComputeSystems/Quartz/SlurmBatchSystem",
     "icon": "./Resources/Slurm.png",
-    "title": "Slurm Batch System",
+    "title": "Batch System",
     "description": "The batch system for running jobs on Quartz.",
     "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023298",
     "openaction": [
