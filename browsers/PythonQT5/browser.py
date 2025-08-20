@@ -801,6 +801,7 @@ class MainWindow(QtWidgets.QMainWindow):
             switching = (next_host != self.current_host) or (next_port != self.current_port)
             remote_id = "/"
             # Push breadcrumb level and switch
+            print(f"title: {title}, next_host: {next_host}, next_port: {next_port}")
             title = entry.get("title") or f"{next_host}:{next_port}"
             self.nav_stack.append({
                 "id": obj.get("id") or "/",

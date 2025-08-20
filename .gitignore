@@ -4,3 +4,4 @@ providers/Slurm/__pycache__/*
 providers/HomeDirectory/__pycache__/*
 providers/Modules/__pycache__/*
 providers/ResearchComputingAtIU/__pycache__/*
+.DS_Store
