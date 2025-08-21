@@ -24,7 +24,7 @@ class BreadcrumbBar(QtWidgets.QWidget):
         self.setPalette(pal)
         self.setFixedHeight(28)
 
-    def set_path(self, parts: list[str]) -> None:
+    def set_path(self, parts: list[str], bold_indices: set[int] | None = None) -> None:
         # Clear
         while self._h.count():
             item = self._h.takeAt(0)
@@ -32,10 +32,12 @@ class BreadcrumbBar(QtWidgets.QWidget):
             if w:
                 w.deleteLater()
         # Build new crumbs
+        bold_set = set(bold_indices or set())
+        bold_set.add(0)  # Always bold the root
         for idx, part in enumerate(parts):
             label = QtWidgets.QLabel(part, self)
             font = label.font()
-            font.setBold(idx == 0)
+            font.setBold(idx in bold_set)
             label.setFont(font)
             label.setCursor(QtCore.Qt.PointingHandCursor)
             # Capture index for click

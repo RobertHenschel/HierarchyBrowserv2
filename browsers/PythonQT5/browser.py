@@ -377,7 +377,7 @@ class MainWindow(QtWidgets.QMainWindow):
             info = {}
         root_name = info.get("RootName") if isinstance(info, dict) else None
         self.root_name = str(root_name) if root_name else "Root"
-        self.breadcrumb.set_path([self.root_name])
+        self._update_breadcrumb()
 
         # Decode and store icons announced by provider
         self.icon_store: Dict[str, QtGui.QPixmap] = {}
@@ -447,7 +447,7 @@ class MainWindow(QtWidgets.QMainWindow):
                         if isinstance(root_name, str) and root_name:
                             self.root_name = root_name
                         self.nav_stack = []
-                        self.breadcrumb.set_path([self.root_name])
+                        self._update_breadcrumb()
                     else:
                         title = root_name if isinstance(root_name, str) and root_name else f"{new_host}:{new_port}"
                         self.nav_stack.append({
@@ -457,7 +457,7 @@ class MainWindow(QtWidgets.QMainWindow):
                             "port": str(new_port),
                             "remote_id": "/",
                         })
-                        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+                        self._update_breadcrumb()
                     self.current_host, self.current_port = new_host, new_port
                     self.load_root(self.current_host, self.current_port)
                 current_id = "/"
@@ -497,7 +497,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     "port": str(self.current_port),
                     "remote_id": target_remote,
                 })
-                self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+                self._update_breadcrumb()
                 processed_any = True
                 current_id = target_remote
                 self.load_children(current_id, self.current_host, self.current_port)
@@ -544,7 +544,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if not isinstance(object_id, str) or not isinstance(human_title, str):
                 break
             self.nav_stack.append({"id": object_id, "title": human_title, "host": self.current_host, "port": str(self.current_port), "remote_id": object_id})
-            self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+            self._update_breadcrumb()
             processed_any = True
             # If the next segment is a command token (e.g., <OpenAction>), allow it even for leaf objects
             next_seg = segs[idx + 1] if (idx + 1) < len(segs) else None
@@ -692,7 +692,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Push into stack and navigate using next endpoint
         self.nav_stack.append({"id": object_id, "title": human_title, "host": next_host, "port": str(next_port), "remote_id": remote_id})
-        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        self._update_breadcrumb()
         # If switching to a different provider endpoint, fetch its info and merge icons
         switching = (next_host != self.current_host) or (next_port != self.current_port)
         self.current_host, self.current_port = next_host, next_port
@@ -745,7 +745,7 @@ class MainWindow(QtWidgets.QMainWindow):
             "port": str(self.current_port),
             "remote_id": target_path,
         })
-        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        self._update_breadcrumb()
         self.load_children(target_path, self.current_host, self.current_port)
 
     # Deep link building moved into toolbar.py
@@ -810,7 +810,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 "port": str(next_port),
                 "remote_id": remote_id,
             })
-            self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+            self._update_breadcrumb()
             self.current_host, self.current_port = next_host, next_port
             if switching:
                 try:
@@ -835,7 +835,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # index 0 is root
         if index <= 0:
             self.nav_stack = []
-            self.breadcrumb.set_path([self.root_name])
+            self._update_breadcrumb()
             self.current_host, self.current_port = self.root_host, self.root_port
             self.load_root(self.root_host, self.root_port)
             return
@@ -851,9 +851,21 @@ class MainWindow(QtWidgets.QMainWindow):
             target_port = int(target.get("port")) if target.get("port") is not None else self.root_port
         except Exception:
             target_port = self.root_port
-        self.breadcrumb.set_path([self.root_name] + [e["title"] for e in self.nav_stack])
+        self._update_breadcrumb()
         self.current_host, self.current_port = target_host, target_port
         self.load_children(target_remote_id, target_host, target_port)
+
+    def _update_breadcrumb(self) -> None:
+        parts = [self.root_name] + [e["title"] for e in self.nav_stack]
+        bold_indices: set[int] = set()
+        try:
+            for idx, entry in enumerate(self.nav_stack, start=1):
+                remote_id = entry.get("remote_id")
+                if isinstance(remote_id, str) and remote_id == "/":
+                    bold_indices.add(idx)
+        except Exception:
+            pass
+        self.breadcrumb.set_path(parts, bold_indices)
 
 
 def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
