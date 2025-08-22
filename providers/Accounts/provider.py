@@ -15,26 +15,26 @@ if str(_PROJECT_ROOT) not in sys.path:
 from providers.base import ObjectProvider, ProviderOptions
 try:
     # When running as a package/module
-    from providers.Accounts.model import WPCount  # type: ignore[import-not-found]
+    from providers.Accounts.model import WPAccount  # type: ignore[import-not-found]
 except Exception:
     # Fallback for direct script execution
     try:
-        from .model import WPCount  # type: ignore[no-redef]
+        from .model import WPAccount  # type: ignore[no-redef]
     except Exception:
         _dir = Path(__file__).resolve().parent
         if str(_dir) not in sys.path:
             sys.path.insert(0, str(_dir))
-        from model import WPCount  # type: ignore[no-redef]
+        from model import WPAccount  # type: ignore[no-redef]
 
 
 PROVIDER_DIR = Path(__file__).resolve().parent
 IDCARD_ICON_PATH = PROVIDER_DIR / "Resources" / "IDCard.png"
 
 
-def _systems() -> List[Tuple[str, str]]:
+def _compute_systems() -> List[Tuple[str, str]]:
     return [
         ("Quartz", "quartz.uits.iu.edu"),
-        ("BigRed200", "bigred200.uits.iu.edu"),
+        ("Big Red 200", "bigred200.uits.iu.edu"),
     ]
 
 
@@ -67,14 +67,14 @@ class AccountsProvider(ObjectProvider):
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         icon_name = f"./resources/{IDCARD_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
-        for system_name, hostname in _systems():
+        for system_name, hostname in _compute_systems():
             try:
                 ok = _has_ssh_account(hostname)
             except Exception:
                 ok = False
             if not ok:
                 continue
-            obj = WPCount(
+            obj = WPAccount(
                 id=f"/{system_name}",
                 title=system_name,
                 icon=icon_name,

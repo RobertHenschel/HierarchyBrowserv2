@@ -7,7 +7,7 @@ from providers.base import ProviderObject
 
 
 @dataclass
-class WPCount(ProviderObject):
+class WPAccount(ProviderObject):
     """Represents an account entry for a compute system.
 
     Emits class_name "WPAccount" per requirement.
