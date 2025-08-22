@@ -37,6 +37,11 @@ def _compute_systems() -> List[Tuple[str, str]]:
         ("Big Red 200", "bigred200.uits.iu.edu"),
         ("Research Desktop", "quartz.uits.iu.edu"),
     ]
+def _storage_systems() -> List[Tuple[str, str]]:
+    return [
+        ("Slate", "slate"),
+        ("SDA", "sda"),
+    ]
 
 
 def _has_ssh_account(hostname: str) -> bool:
@@ -82,6 +87,55 @@ class AccountsProvider(ObjectProvider):
                 objects=0,
             )
             objects.append(obj.to_dict())
+        for system_name, quota_name in _storage_systems():
+            # Detect storage quota by scanning `quota` output for the named quota
+            try:
+                out = subprocess.check_output(["quota"], text=True, stderr=subprocess.STDOUT)
+            except Exception:
+                out = ""
+            ok = False
+            for line in out.splitlines():
+                s = line.strip()
+                if not s:
+                    continue
+                # Skip file-inode quota lines; only consider storage blocks
+                if "files" in s.lower():
+                    continue
+                if quota_name.lower() not in s.lower():
+                    continue
+                # Heuristic: if any percentage token is non-zero or any size token has a non-zero numeric part
+                for tok in s.split():
+                    # Percent token like '69%'
+                    if tok.endswith('%'):
+                        try:
+                            if int(tok.rstrip('%')) > 0:
+                                ok = True
+                                break
+                        except Exception:
+                            pass
+                    # Size token like '558.0G'/'1.4T'/'0.0G'
+                    num = tok
+                    # Strip trailing unit letters and punctuation
+                    while num and not num[-1].isdigit():
+                        num = num[:-1]
+                    # Accept integers or decimals
+                    try:
+                        if num and float(num) > 0.0:
+                            ok = True
+                            break
+                    except Exception:
+                        pass
+                if ok:
+                    break
+            if ok:
+                obj = WPAccount(
+                    id=f"/{system_name}",
+                    title=system_name,
+                    icon=icon_name,
+                    objects=0,
+                )
+                objects.append(obj.to_dict())
+
         return {"objects": objects}
 
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:

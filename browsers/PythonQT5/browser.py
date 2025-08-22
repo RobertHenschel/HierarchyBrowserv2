@@ -86,7 +86,7 @@ def fetch_root_objects(host: Optional[str] = None, port: Optional[int] = None) -
     p = port or PROVIDER_PORT
     payload = {"method": "GetRootObjects"}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
-    with socket.create_connection((h, p), timeout=3) as s:
+    with socket.create_connection((h, p), timeout=10) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
@@ -107,7 +107,7 @@ def fetch_info(host: Optional[str] = None, port: Optional[int] = None) -> Dict[s
     p = port or PROVIDER_PORT
     payload = {"method": "GetInfo"}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
-    with socket.create_connection((h, p), timeout=3) as s:
+    with socket.create_connection((h, p), timeout=10) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
@@ -873,7 +873,7 @@ def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optio
     p = port or PROVIDER_PORT
     payload = {"method": "GetObjects", "id": object_id}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
-    with socket.create_connection((h, p), timeout=3) as s:
+    with socket.create_connection((h, p), timeout=10) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
