@@ -35,6 +35,7 @@ def _compute_systems() -> List[Tuple[str, str]]:
     return [
         ("Quartz", "quartz.uits.iu.edu"),
         ("Big Red 200", "bigred200.uits.iu.edu"),
+        ("Research Desktop", "quartz.uits.iu.edu"),
     ]
 
 
