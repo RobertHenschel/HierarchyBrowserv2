@@ -446,6 +446,8 @@ class MainWindow(QtWidgets.QMainWindow):
                     if not processed_any and len(self.nav_stack) == 0:
                         if isinstance(root_name, str) and root_name:
                             self.root_name = root_name
+                        # Fix A: treat the first deep-linked provider as the root endpoint
+                        self.root_host, self.root_port = new_host, new_port
                         self.nav_stack = []
                         self._update_breadcrumb()
                     else:
