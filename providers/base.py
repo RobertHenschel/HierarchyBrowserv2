@@ -201,21 +201,15 @@ class ObjectProvider(ABC):
         base, command, prop, value = _parse_command_path(path_str)
         if base == "":
             base = "/"
-        print(f"Base: {base}, Command: {command}, Prop: {prop}, Value: {value}")
         if not command:
-            print(f"No command, listing for base {base}")
             typed = list_for_base(base)
             return {"objects": [o.to_dict() for o in typed]}
         if prop is None:
-            print(f"Prop is None, returning empty list")
             return {"objects": []}
         if allowed_group_fields is not None and prop not in allowed_group_fields:
-            print(f"Prop {prop} not in allowed group fields {allowed_group_fields}")
             return {"objects": []}
-        print(f"Listing for base {base}")
         typed_objects = list(list_for_base(base))
         if command == "GroupBy":
-            print(f"Grouping by {prop}")
             groups = _group_objects_by_property(base, typed_objects, prop, group_icon_filename, make_group)
             return {"objects": groups}
         if command == "Show" and value is not None:

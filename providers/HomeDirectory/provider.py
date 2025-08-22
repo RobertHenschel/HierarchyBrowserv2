@@ -30,6 +30,8 @@ FILE_ICON_PATH = PROVIDER_DIR / "Resources" / "File.png"
 
 class HomeDirectoryProvider(ObjectProvider):
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
+        return self.get_objects_for_path("/")
+    
         home = Path.home()
         dir_icon_name = f"./resources/{DIR_ICON_PATH.name}"
         file_icon_name = f"./resources/{FILE_ICON_PATH.name}"
@@ -88,16 +90,24 @@ class HomeDirectoryProvider(ObjectProvider):
         return {"objects": objects}
 
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
-        if path_str.strip() == "/" or path_str.strip() == "":
-            return self.get_root_objects_payload()
+        #if path_str.strip() == "/" or path_str.strip() == "":
+        #    return self.get_root_objects_payload()
 
         home = Path.home().resolve()
         dir_icon_name = f"./resources/{DIR_ICON_PATH.name}"
         file_icon_name = f"./resources/{FILE_ICON_PATH.name}"
 
         def list_for_base(base_rel: str) -> List[ProviderObject]:
-            rel = base_rel
-            target = (home / rel).resolve()
+            home = Path.home().resolve()
+            if base_rel == "/":
+                target = home.resolve()
+                rel = ""
+            else:
+                rel = base_rel
+                if rel.startswith("/"):
+                    rel = rel[1:]
+                # build target by adding rel to home
+                target = home.joinpath(rel).resolve()
             try:
                 target.relative_to(home)
             except Exception:
