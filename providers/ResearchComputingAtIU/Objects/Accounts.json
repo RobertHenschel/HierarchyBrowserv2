@@ -1,0 +1,13 @@
+{
+    "class": "WPObject",
+    "id": "/AccountsUsage",
+    "icon": "./Resources/Person.png",
+    "title": "Accounts/Usage",
+    "openaction": [
+        {
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8892
+        }
+    ]
+}
