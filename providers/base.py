@@ -81,7 +81,7 @@ class ObjectProvider(ABC):
             return any(message.get(k) == "GetObjects" for k in candidate_keys)
         if isinstance(message, str):
             return message.strip() == "GetObjects"
-        return False
+        return False  
 
     @staticmethod
     def extract_object_id(message: Any) -> Optional[str]:
@@ -117,6 +117,8 @@ class ObjectProvider(ABC):
             try:
                 return self.get_objects_for_path(object_id)
             except Exception as exc:  # pragma: no cover - defensive
+                import traceback
+                traceback.print_exc()
                 return {"error": f"Failed to list objects: {exc}"}
         return {"error": "Unknown message"}
 
@@ -224,6 +226,18 @@ class ObjectProvider(ABC):
                 if str(v) == value:
                     filtered.append(o.to_dict())
             return {"objects": filtered}
+        if command == "Search":
+            if prop == "yes": # recursive
+                return {"objects": []}
+            else: # non-recursive
+                filtered: list[dict[str, object]] = []
+                for o in typed_objects:
+                    # value is prop:string
+                    prop_string = value.split(":")[0]
+                    value_string = value.split(":")[1]
+                    if o.search(prop_string, value_string):
+                        filtered.append(o.to_dict())
+                return {"objects": filtered}
         return {"objects": []}
 
 
@@ -245,6 +259,44 @@ class ProviderObject:
     @property
     def class_name(self) -> str:
         return "WPObject"
+
+    def search(self,prop_string: str, value_string: str) -> bool:
+        """Return True if value_string is a substring match.
+
+        - If prop_string == "all": search all properties emitted by to_dict().
+        - Otherwise: search only the named property if present.
+        Matching is case-insensitive and converts values to strings as needed.
+        """
+        try:
+            payload = self.to_dict()
+        except Exception:
+            return False
+
+        needle = "" if value_string is None else str(value_string)
+        needle_lc = needle.lower()
+
+        if prop_string == "all":
+            for v in payload.values():
+                if v is None:
+                    continue
+                try:
+                    if needle_lc in str(v).lower():
+                        return True
+                except Exception:
+                    continue
+            return False
+
+        # Specific property search
+        try:
+            value = payload.get(prop_string)
+        except Exception:
+            value = None
+        if value is None:
+            return False
+        try:
+            return needle_lc in str(value).lower()
+        except Exception:
+            return False
 
     def _extra_fields(self) -> dict[str, object]:
         """Override in subclasses to emit additional fields."""
