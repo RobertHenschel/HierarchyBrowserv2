@@ -13,7 +13,7 @@ _PROJECT_ROOT = _PROVIDERS_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from providers.base import ObjectProvider, ProviderOptions
+from providers.base import ObjectProvider, ProviderOptions, ProviderObject
 try:
     # When running as a package/module
     from providers.Accounts.model import WPAccount  # type: ignore[import-not-found]
@@ -50,19 +50,7 @@ def _has_ssh_account(hostname: str) -> bool:
 
     Uses a short timeout, no password prompts, and avoids host key prompts.
     """
-    cmd = [
-        "ssh",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "-o",
-        "ConnectTimeout=5",
-        hostname,
-        "true",
-    ]
+    cmd = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "ConnectTimeout=5", hostname, "true",]
     try:
         proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=7)
         return proc.returncode == 0
@@ -105,64 +93,87 @@ def _has_storage_quota(quota_output: str, quota_name: str) -> bool:
             break
     return ok
 
-class AccountsProvider(ObjectProvider):
-    def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
-        icon_name = f"./resources/{IDCARD_ICON_PATH.name}"
-        objects: List[Dict[str, object]] = []
-        for system_name, hostname in _compute_systems():
-            try:
-                ok = _has_ssh_account(hostname)
-            except Exception:
-                ok = False
-            if not ok:
-                continue
-            obj = WPAccount(
+
+def build_accounts_objects() -> List[ProviderObject]:
+    """Build the full typed list of account objects for this provider.
+
+    Returns a list of ProviderObject instances (e.g., WPAccount) that includes
+    compute systems (reachable via SSH), storage quotas detected from `quota`,
+    and Slurm associations for the current user.
+    """
+    icon_name = f"./resources/{IDCARD_ICON_PATH.name}"
+    objects: List[ProviderObject] = []
+
+    # Compute systems with reachable SSH
+    for system_name, hostname in _compute_systems():
+        try:
+            ok = _has_ssh_account(hostname)
+        except Exception:
+            ok = False
+        if not ok:
+            continue
+        objects.append(WPAccount(
+            id=f"/{system_name}",
+            title=system_name,
+            icon=icon_name,
+            objects=0,
+            type="compute"
+        ))
+
+    # Storage quotas detected from `quota`
+    try:
+        quota_out = subprocess.check_output(["quota"], text=True, stderr=subprocess.STDOUT)
+    except Exception:
+        quota_out = ""
+    for system_name, quota_name in _storage_systems():
+        ok = _has_storage_quota(quota_out, quota_name)
+        if ok:
+            objects.append(WPAccount(
                 id=f"/{system_name}",
                 title=system_name,
                 icon=icon_name,
                 objects=0,
-            )
-            objects.append(obj.to_dict())
-        for system_name, quota_name in _storage_systems():
-            # Detect storage quota by scanning `quota` output for the named quota
-            try:
-                out = subprocess.check_output(["quota"], text=True, stderr=subprocess.STDOUT)
-            except Exception:
-                out = ""
-            ok = _has_storage_quota(out, quota_name)
-            if ok:
-                obj = WPAccount(
-                    id=f"/{system_name}",
-                    title=system_name,
-                    icon=icon_name,
-                    objects=0,
-                )
-                objects.append(obj.to_dict())
-        # Get Slurm accounts
-        try:           
-            username = getpass.getuser()
-            out = subprocess.check_output(["sacctmgr", "show", "association", "-n", "-p", f"user={username}"], text=True, stderr=subprocess.STDOUT)
-        except Exception:
-            out = ""
-        # sacctmgr show association -n -p user=henschel | cut -d "|" -f 2
-        for line in out.splitlines():
-            s = line.strip()
-            if not s:
-                continue
-            if "|" not in s:
-                continue
-            obj = WPAccount(
-                id=f"/{s.split('|')[1]}",
-                title="Slurm: " + s.split("|")[1],
-                icon=icon_name,
-                objects=0,
-            )
-            objects.append(obj.to_dict())
-        return {"objects": objects}
+                type="storage"
+            ))
+
+    # Slurm associations for the current user
+    try:
+        username = getpass.getuser()
+        sacct_out = subprocess.check_output(["sacctmgr", "show", "association", "-n", "-p", f"user={username}"], text=True, stderr=subprocess.STDOUT)
+    except Exception:
+        sacct_out = ""
+    for line in sacct_out.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if "|" not in s:
+            continue
+        objects.append(WPAccount(
+            id=f"/{s.split('|')[1]}",
+            title="Slurm: " + s.split("|")[1],
+            icon=icon_name,
+            objects=0,
+            type="slurm"
+        ))
+
+    return objects
+
+class AccountsProvider(ObjectProvider):
+    def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
+        typed_objects = build_accounts_objects()
+        return {"objects": [o.to_dict() for o in typed_objects]}
 
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
         # Accounts are leaves; only root listing is supported for now
-        return self.get_root_objects_payload()
+        # return self.get_root_objects_payload()
+        def list_for_base(base: str) -> List[ProviderObject]:
+            return build_accounts_objects()
+
+        return self.build_objects_for_path(
+            path_str,
+            list_for_base,
+            group_icon_filename=f"./resources/Group.png",
+        )
 
 
 def main() -> None:

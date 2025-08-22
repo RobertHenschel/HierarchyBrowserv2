@@ -7,7 +7,7 @@ def request_get_root_objects(host: str = "127.0.0.1", port: int = 8888) -> Dict[
     payload = {"method": "GetRootObjects"}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
 
-    with socket.create_connection((host, port), timeout=5) as s:
+    with socket.create_connection((host, port), timeout=10) as s:
         s.sendall(message.encode("utf-8"))
         # Read one line response
         buf = b""
@@ -25,7 +25,7 @@ def request_get_info(host: str = "127.0.0.1", port: int = 8888) -> Dict[str, Any
     payload = {"method": "GetInfo"}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
 
-    with socket.create_connection((host, port), timeout=5) as s:
+    with socket.create_connection((host, port), timeout=10) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):
@@ -42,7 +42,7 @@ def request_get_objects(object_id: str, host: str = "127.0.0.1", port: int = 888
     payload = {"method": "GetObjects", "id": object_id}
     message = json.dumps(payload, separators=(",", ":")) + "\n"
 
-    with socket.create_connection((host, port), timeout=5) as s:
+    with socket.create_connection((host, port), timeout=10) as s:
         s.sendall(message.encode("utf-8"))
         buf = b""
         while not buf.endswith(b"\n"):

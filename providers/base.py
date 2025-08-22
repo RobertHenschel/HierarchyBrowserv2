@@ -102,6 +102,8 @@ class ObjectProvider(ABC):
             try:
                 return self.get_root_objects_payload()
             except Exception as exc:  # pragma: no cover - defensive
+                import traceback
+                traceback.print_exc()
                 return {"error": f"Failed to serve objects: {exc}"}
         if self.is_get_info(incoming):
             return {
@@ -197,15 +199,23 @@ class ObjectProvider(ABC):
         make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
     ) -> Dict[str, Any]:
         base, command, prop, value = _parse_command_path(path_str)
+        if base == "":
+            base = "/"
+        print(f"Base: {base}, Command: {command}, Prop: {prop}, Value: {value}")
         if not command:
+            print(f"No command, listing for base {base}")
             typed = list_for_base(base)
             return {"objects": [o.to_dict() for o in typed]}
         if prop is None:
+            print(f"Prop is None, returning empty list")
             return {"objects": []}
         if allowed_group_fields is not None and prop not in allowed_group_fields:
+            print(f"Prop {prop} not in allowed group fields {allowed_group_fields}")
             return {"objects": []}
+        print(f"Listing for base {base}")
         typed_objects = list(list_for_base(base))
         if command == "GroupBy":
+            print(f"Grouping by {prop}")
             groups = _group_objects_by_property(base, typed_objects, prop, group_icon_filename, make_group)
             return {"objects": groups}
         if command == "Show" and value is not None:
@@ -266,7 +276,10 @@ class WPGroup(ProviderObject):
 
 
 def _parse_command_path(path_str: str) -> tuple[str, Optional[str], Optional[str], Optional[str]]:
-    base = path_str.lstrip("/")
+    if not path_str.count("/") == 1:
+        base = path_str.lstrip("/")
+    else:
+        base = path_str
     command: Optional[str] = None
     prop: Optional[str] = None
     value: Optional[str] = None
@@ -307,8 +320,11 @@ def _group_objects_by_property(
             grp_obj = make_group(str(value), prop, count)
             results.append(grp_obj.to_dict())
         else:
+            id = f"/{base}/<Show:{prop}:{value}>"
+            if base == "/":
+                id = f"/<Show:{prop}:{value}>"
             grp_obj = WPGroup(
-                id=f"/{base}/<Show:{prop}:{value}>",
+                id=id,
                 title=str(value),
                 icon=group_icon_filename,
                 objects=int(count),
