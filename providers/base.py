@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import sys
 import socketserver
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -159,8 +160,13 @@ class ObjectProvider(ABC):
             allow_reuse_address = True
 
         with ReusableTCPServer((host, port), JsonLineHandler) as server:
-            full_name = Path(__file__)
-            print(f"Starting {full_name}", flush=True)
+            # Show the path of the script that was actually invoked
+            main_module = sys.modules.get("__main__")
+            candidate_path: str = getattr(
+                main_module, "__file__", sys.argv[0] if sys.argv else __file__
+            )
+            invoked_path = Path(candidate_path).resolve()
+            print(f"Starting {invoked_path}", flush=True)
             print(f"Provider listening on {host}:{port}", flush=True)
             try:
                 server.serve_forever()
