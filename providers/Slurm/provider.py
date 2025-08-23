@@ -131,18 +131,21 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
     icon_name = f"./resources/{JOB_ICON_PATH.name}"
     try:
         out = ""
+        # %M: elapsed time, %l: time limit, %C: total CPUs, %m: requested memory, %a: account, %r: state reason, %Q: priority, %b: gres
+        # Note: %m units depend on site config; %M/%l format like days-hours:minutes:seconds when applicable
+        fmt = "%i|%u|%D|%T|%P|%j|%C|%m|%l|%a|%M|%r|%Q|%b"
         if part == "":
-            out = subprocess.check_output(["squeue", "-h", "-o", "%i|%u|%D|%T|%P"], text=True)
+            out = subprocess.check_output(["squeue", "-h", "-o", fmt], text=True)
         else:
-            out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u|%D|%T|%P"], text=True)
+            out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", fmt], text=True)
         typed: List[ProviderObject] = []
         for line in out.splitlines():
             entry = line.strip()
             if not entry:
                 continue
-            # Split exactly into 4 parts: jobid | user | nodecount | state | partition
-            parts = entry.split("|", 4)
-            if len(parts) != 5:
+            # Split into expected parts per fmt
+            parts = entry.split("|", 13)
+            if len(parts) != 14:
                 continue
             jid = parts[0].strip()
             user = parts[1].strip()
@@ -152,6 +155,15 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
                 nodes = 0
             state_raw = parts[3].strip()
             partition_name = parts[4].strip()
+            jobname = parts[5].strip()
+            cpus_str = parts[6].strip()
+            mem_str = parts[7].strip()
+            timelimit_str = parts[8].strip()
+            account_str = parts[9].strip()
+            elapsed_str = parts[10].strip()
+            state_reason_str = parts[11].strip()
+            priority_str = parts[12].strip()
+            gres_str = parts[13].strip()
             # Normalize to human readable: capitalize only first letter, lower rest
             state = state_raw.capitalize()
             if not jid:
@@ -159,6 +171,37 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
             job_id = f"/{partition_name}/{jid}"
             if job_id.startswith("//"):
                 job_id = job_id[1:]
+            # Compute remaining runtime from timelimit - elapsed
+            remaining = None
+            try:
+                def _to_seconds(s: str) -> int:
+                    if not s:
+                        return 0
+                    if "-" in s:
+                        days_part, time_part = s.split("-", 1)
+                        days = int(days_part)
+                    else:
+                        days = 0
+                        time_part = s
+                    bits = time_part.split(":")
+                    bits = [int(x) if x.isdigit() else 0 for x in bits]
+                    while len(bits) < 3:
+                        bits.insert(0, 0)
+                    hh, mm, ss = bits[-3], bits[-2], bits[-1]
+                    return days * 86400 + hh * 3600 + mm * 60 + ss
+                tl = _to_seconds(timelimit_str)
+                el = _to_seconds(elapsed_str)
+                rem = max(0, tl - el)
+                d, rem2 = divmod(rem, 86400)
+                h, rem3 = divmod(rem2, 3600)
+                m, s = divmod(rem3, 60)
+                if d > 0:
+                    remaining = f"{d}-{h:02d}:{m:02d}:{s:02d}"
+                else:
+                    remaining = f"{h:02d}:{m:02d}:{s:02d}"
+            except Exception:
+                remaining = None
+
             typed.append(
                 WPSlurmJob(
                     id=job_id,
@@ -170,6 +213,16 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
                     nodecount=int(nodes),
                     jobstate=state,
                     partition=partition_name,
+                    jobname=jobname,
+                    cpus=(int(cpus_str) if cpus_str.isdigit() else 0),
+                    totalmemory=mem_str if mem_str else None,
+                    requestedruntime=timelimit_str if timelimit_str else None,
+                    account=account_str if account_str else None,
+                    elapsedruntime=elapsed_str if elapsed_str else None,
+                    state_reason=state_reason_str if state_reason_str else None,
+                    priority=(int(priority_str) if priority_str.isdigit() else None),
+                    remainingruntime=remaining,
+                    gres=gres_str if gres_str else None,
                 )
             )
         return typed

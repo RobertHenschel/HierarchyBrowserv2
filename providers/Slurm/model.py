@@ -24,6 +24,16 @@ class WPSlurmJob(ProviderObject):
     nodecount: int = 0
     jobstate: Optional[str] = None
     partition: Optional[str] = None
+    jobname: Optional[str] = None
+    cpus: int = 0
+    totalmemory: Optional[str] = None
+    requestedruntime: Optional[str] = None
+    account: Optional[str] = None
+    elapsedruntime: Optional[str] = None
+    state_reason: Optional[str] = None
+    priority: Optional[int] = None
+    remainingruntime: Optional[str] = None
+    gres: Optional[str] = None
 
     @property
     def class_name(self) -> str:  # noqa: D401
@@ -39,6 +49,25 @@ class WPSlurmJob(ProviderObject):
             extra["jobstate"] = self.jobstate
         if self.partition is not None:
             extra["partition"] = self.partition
+        if self.jobname is not None:
+            extra["jobname"] = self.jobname
+        extra["cpus"] = int(self.cpus)
+        if self.totalmemory is not None:
+            extra["totalmemory"] = self.totalmemory
+        if self.requestedruntime is not None:
+            extra["requestedruntime"] = self.requestedruntime
+        if self.account is not None:
+            extra["account"] = self.account
+        if self.elapsedruntime is not None:
+            extra["elapsedruntime"] = self.elapsedruntime
+        if self.state_reason is not None:
+            extra["state_reason"] = self.state_reason
+        if self.priority is not None:
+            extra["priority"] = int(self.priority)
+        if self.remainingruntime is not None:
+            extra["remainingruntime"] = self.remainingruntime
+        if self.gres is not None:
+            extra["gres"] = self.gres
         return extra
 
 
