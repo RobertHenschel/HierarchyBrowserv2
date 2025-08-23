@@ -189,6 +189,8 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     font.setBold(True)
     # Scale font relative to badge; tweak for readability
     font.setPointSizeF(max(9.0, diameter * 0.50))
+    if count >= 100:
+        font.setPointSizeF(max(7.0, diameter * 0.30))
     painter.setFont(font)
     text = str(count if count < 100 else "99+")
     painter.drawText(QtCore.QRectF(x, y, diameter, diameter), QtCore.Qt.AlignCenter, text)

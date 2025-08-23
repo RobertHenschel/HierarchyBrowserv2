@@ -1,0 +1,22 @@
+{
+    "class": "WPLustreDirectory",
+    "id": "/ComputeSystems/Quartz/ScratchDirectory",
+    "icon": "./Resources/Scratch.png",
+    "title": "Scratch Directory",
+    "description": "Your Scratch directory on Quartz.",
+    "openaction": [
+        {
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8891
+        }
+    ],
+    "contextmenu": [
+        {
+            "title": "Open Directory Browser",
+            "action": "objectbrowser",
+            "hostname": "localhost",
+            "port": 8891
+        }
+    ]
+}
