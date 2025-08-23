@@ -85,7 +85,7 @@ class SlurmProvider(ObjectProvider):
         objects: List[Dict[str, object]] = []
         for part in partitions:
             try:
-                job_count = len(_get_jobs_and_users_for_partition(part))
+                job_count = len(_get_jobs_for_partition(part))
             except Exception:
                 job_count = 0
             obj = WPSlurmPartition(
@@ -114,26 +114,7 @@ class SlurmProvider(ObjectProvider):
             # Always extract the partition as the first segment, ignoring any command tokens
             segments = base.strip("/").split("/")
             part = segments[0] if segments else ""
-            icon_name = f"./resources/{JOB_ICON_PATH.name}"
-            typed: List[ProviderObject] = []
-            for jid, user, nodes, state, partition in _get_jobs_and_users_for_partition(part):
-                id = f"/{partition}/{jid}"
-                if id.startswith("//"):
-                    id = id[1:]
-                typed.append(
-                    WPSlurmJob(
-                        id=id,
-                        title=jid,
-                        icon=icon_name,
-                        objects=0,
-                        jobarray=("_" in jid),
-                        userid=user,
-                        nodecount=int(nodes),
-                        jobstate=state,
-                        partition=partition,
-                    )
-                )
-            return typed
+            return _get_jobs_for_partition(part)
 
         return self.build_objects_for_path(
             path_str,
@@ -141,19 +122,20 @@ class SlurmProvider(ObjectProvider):
             group_icon_filename=f"./resources/Group.png",
         )
 
-def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str, int, str]]:
-    """Return list of (jobid, userid, nodecount, jobstate) for jobs in the given partition.
+def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
+    """Return typed WPSlurmJob objects for jobs in the given partition.
 
     Uses a single squeue call to retrieve all fields for efficiency.
     """
     part = partition.lstrip("/")
+    icon_name = f"./resources/{JOB_ICON_PATH.name}"
     try:
         out = ""
         if part == "":
             out = subprocess.check_output(["squeue", "-h", "-o", "%i|%u|%D|%T|%P"], text=True)
         else:
             out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u|%D|%T|%P"], text=True)
-        pairs: List[Tuple[str, str, int, str, str]] = []
+        typed: List[ProviderObject] = []
         for line in out.splitlines():
             entry = line.strip()
             if not entry:
@@ -169,12 +151,28 @@ def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str, in
             except Exception:
                 nodes = 0
             state_raw = parts[3].strip()
-            partition = parts[4].strip()
+            partition_name = parts[4].strip()
             # Normalize to human readable: capitalize only first letter, lower rest
             state = state_raw.capitalize()
-            if jid:
-                pairs.append((jid, user, nodes, state, partition))
-        return pairs
+            if not jid:
+                continue
+            job_id = f"/{partition_name}/{jid}"
+            if job_id.startswith("//"):
+                job_id = job_id[1:]
+            typed.append(
+                WPSlurmJob(
+                    id=job_id,
+                    title=jid,
+                    icon=icon_name,
+                    objects=0,
+                    jobarray=("_" in jid),
+                    userid=user,
+                    nodecount=int(nodes),
+                    jobstate=state,
+                    partition=partition_name,
+                )
+            )
+        return typed
     except Exception:
         return []
 
