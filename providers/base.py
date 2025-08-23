@@ -221,7 +221,7 @@ class ObjectProvider(ABC):
             if command == "GroupBy" and isinstance(prop, str):
                 if allowed_group_fields is not None and prop not in allowed_group_fields:
                     return {"objects": []}
-                groups = _group_objects_by_property(base_clean, typed_objects, prop, group_icon_filename, make_group)
+                groups = _group_objects_by_property(base_clean, typed_objects, prop, group_icon_filename, make_group, path_str = path_str)
                 return {"objects": groups}
             if command == "Show" and isinstance(prop, str) and value is not None:
                 filtered: list[dict[str, object]] = []
