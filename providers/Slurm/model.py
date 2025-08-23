@@ -23,6 +23,7 @@ class WPSlurmJob(ProviderObject):
     userid: Optional[str] = None
     nodecount: int = 0
     jobstate: Optional[str] = None
+    partition: Optional[str] = None
 
     @property
     def class_name(self) -> str:  # noqa: D401
@@ -36,6 +37,8 @@ class WPSlurmJob(ProviderObject):
         extra["nodecount"] = int(self.nodecount)
         if self.jobstate is not None:
             extra["jobstate"] = self.jobstate
+        if self.partition is not None:
+            extra["partition"] = self.partition
         return extra
 
 

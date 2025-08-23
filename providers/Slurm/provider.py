@@ -32,6 +32,7 @@ except Exception:
 PROVIDER_DIR = Path(__file__).resolve().parent
 PARTITION_ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
 JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job.png"
+GROUP_ICON_PATH = PROVIDER_DIR / "Resources" / "IDCard.png"
 
 
 def _get_slurm_partitions() -> List[str]:
@@ -62,11 +63,25 @@ def _get_slurm_partitions() -> List[str]:
     except Exception:
         return []
 
+def _get_my_jobs_count() -> int:
+    try:
+        out = subprocess.check_output(["squeue", "-h", "--me", "-o", "%i"], text=True)
+        return len(out.splitlines())
+    except Exception:
+        return 0
+
+def _get_my_userid() -> str:
+    try:
+        out = subprocess.check_output(["whoami"], text=True)
+        return out.strip()
+    except Exception:
+        return ""
 
 class SlurmProvider(ObjectProvider):
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         partitions = _get_slurm_partitions()
-        icon_name = f"./resources/{PARTITION_ICON_PATH.name}"
+        partition_name = f"./resources/{PARTITION_ICON_PATH.name}"
+        group_name = f"./resources/{GROUP_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
         for part in partitions:
             try:
@@ -76,10 +91,18 @@ class SlurmProvider(ObjectProvider):
             obj = WPSlurmPartition(
                 id=f"/{part}",
                 title=part,
-                icon=icon_name,
+                icon=partition_name,
                 objects=int(job_count),
             )
             objects.append(obj.to_dict())
+        
+        obj = WPGroup(
+            id=f"/<Show:userid:{_get_my_userid()}>",
+            title="My Jobs",
+            icon=group_name,
+            objects=int(_get_my_jobs_count()),
+        )
+        objects.append(obj.to_dict())
         return {"objects": objects}
 
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
@@ -91,14 +114,15 @@ class SlurmProvider(ObjectProvider):
             # Always extract the partition as the first segment, ignoring any command tokens
             segments = base.strip("/").split("/")
             part = segments[0] if segments else ""
-            if not part:
-                return []
+            print(f"part: {part}; segments: {segments}", flush=True)
+            #if not part:
+            #    return []
             icon_name = f"./resources/{JOB_ICON_PATH.name}"
             typed: List[ProviderObject] = []
-            for jid, user, nodes, state in _get_jobs_and_users_for_partition(part):
+            for jid, user, nodes, state, partition in _get_jobs_and_users_for_partition(part):
                 typed.append(
                     WPSlurmJob(
-                        id=f"/{part}/{jid}",
+                        id=f"/{partition}/{jid}",
                         title=jid,
                         icon=icon_name,
                         objects=0,
@@ -106,6 +130,7 @@ class SlurmProvider(ObjectProvider):
                         userid=user,
                         nodecount=int(nodes),
                         jobstate=state,
+                        partition=partition,
                     )
                 )
             return typed
@@ -123,15 +148,19 @@ def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str, in
     """
     part = partition.lstrip("/")
     try:
-        out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u|%D|%T"], text=True)
-        pairs: List[Tuple[str, str, int, str]] = []
+        out = ""
+        if part == "":
+            out = subprocess.check_output(["squeue", "-h", "-o", "%i|%u|%D|%T|%P"], text=True)
+        else:
+            out = subprocess.check_output(["squeue", "-h", "-p", part, "-o", "%i|%u|%D|%T|%P"], text=True)
+        pairs: List[Tuple[str, str, int, str, str]] = []
         for line in out.splitlines():
             entry = line.strip()
             if not entry:
                 continue
-            # Split exactly into 4 parts: jobid | user | nodecount | state
-            parts = entry.split("|", 3)
-            if len(parts) != 4:
+            # Split exactly into 4 parts: jobid | user | nodecount | state | partition
+            parts = entry.split("|", 4)
+            if len(parts) != 5:
                 continue
             jid = parts[0].strip()
             user = parts[1].strip()
@@ -140,10 +169,11 @@ def _get_jobs_and_users_for_partition(partition: str) -> List[Tuple[str, str, in
             except Exception:
                 nodes = 0
             state_raw = parts[3].strip()
+            partition = parts[4].strip()
             # Normalize to human readable: capitalize only first letter, lower rest
             state = state_raw.capitalize()
             if jid:
-                pairs.append((jid, user, nodes, state))
+                pairs.append((jid, user, nodes, state, partition))
         return pairs
     except Exception:
         return []
