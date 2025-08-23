@@ -114,9 +114,6 @@ class SlurmProvider(ObjectProvider):
             # Always extract the partition as the first segment, ignoring any command tokens
             segments = base.strip("/").split("/")
             part = segments[0] if segments else ""
-            print(f"part: {part}; segments: {segments}", flush=True)
-            #if not part:
-            #    return []
             icon_name = f"./resources/{JOB_ICON_PATH.name}"
             typed: List[ProviderObject] = []
             for jid, user, nodes, state, partition in _get_jobs_and_users_for_partition(part):

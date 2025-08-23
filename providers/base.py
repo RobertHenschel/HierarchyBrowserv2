@@ -207,7 +207,6 @@ class ObjectProvider(ABC):
         make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
     ) -> Dict[str, Any]:
         base, command, prop, value = _parse_command_path(path_str)
-        print(f"base: {base}, command: {command}, prop: {prop}, value: {value}", flush=True)
         if base == "":
             base = "/"
         if not command:
@@ -222,7 +221,6 @@ class ObjectProvider(ABC):
             groups = _group_objects_by_property(base, typed_objects, prop, group_icon_filename, make_group)
             return {"objects": groups}
         if command == "Show" and value is not None:
-            print(f"Show: {base}, {prop}, {value}", flush=True)
             filtered: list[dict[str, object]] = []
             for o in typed_objects:
                 try:
