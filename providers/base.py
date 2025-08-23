@@ -206,44 +206,120 @@ class ObjectProvider(ABC):
         group_icon_filename: str = "./resources/Group.png",
         make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
     ) -> Dict[str, Any]:
-        base, command, prop, value = _parse_command_path(path_str)
-        if base == "":
-            base = "/"
-        if not command:
-            typed = list_for_base(base)
+        base_clean, tokens = _parse_command_pipeline(path_str)
+        if base_clean == "":
+            base_clean = "/"
+        # No commands: list base
+        if not tokens:
+            typed = list_for_base(base_clean)
             return {"objects": [o.to_dict() for o in typed]}
-        if prop is None:
+
+        # Backward-compatible single command handling (including Search)
+        if len(tokens) == 1:
+            command, prop, value = tokens[0]
+            typed_objects = list(list_for_base(base_clean))
+            if command == "GroupBy" and isinstance(prop, str):
+                if allowed_group_fields is not None and prop not in allowed_group_fields:
+                    return {"objects": []}
+                groups = _group_objects_by_property(base_clean, typed_objects, prop, group_icon_filename, make_group)
+                return {"objects": groups}
+            if command == "Show" and isinstance(prop, str) and value is not None:
+                filtered: list[dict[str, object]] = []
+                for o in typed_objects:
+                    try:
+                        v = o.to_dict().get(prop)
+                    except Exception:
+                        v = None
+                    if v is None:
+                        continue
+                    if str(v) == str(value):
+                        filtered.append(o.to_dict())
+                return {"objects": filtered}
+            if command == "Search":
+                # Legacy format value="prop:string" or split prop/value
+                if value is not None and ":" in value:
+                    prop_string = value.split(":", 1)[0]
+                    value_string = value.split(":", 1)[1]
+                else:
+                    prop_string = prop if isinstance(prop, str) else "all"
+                    value_string = value if isinstance(value, str) else ""
+                filtered: list[dict[str, object]] = []
+                for o in typed_objects:
+                    try:
+                        if o.search(prop_string, value_string):
+                            filtered.append(o.to_dict())
+                    except Exception:
+                        continue
+                return {"objects": filtered}
             return {"objects": []}
-        if allowed_group_fields is not None and prop not in allowed_group_fields:
-            return {"objects": []}
-        typed_objects = list(list_for_base(base))
-        if command == "GroupBy":
-            groups = _group_objects_by_property(base, typed_objects, prop, group_icon_filename, make_group)
+
+        # Multi-command pipeline
+        typed_objects = list(list_for_base(base_clean))
+
+        # Special-case: Show* -> GroupBy:P -> Show:P:V (drill into that group and return leaf objects)
+        last_cmd, last_prop, last_value = tokens[-1]
+        if last_cmd == "Show" and isinstance(last_prop, str) and last_value is not None:
+            # Find a GroupBy token earlier in the sequence
+            gb_index = -1
+            gb_prop: Optional[str] = None
+            for i in range(len(tokens) - 2, -1, -1):
+                if tokens[i][0] == "GroupBy":
+                    gb_index = i
+                    gb_prop = tokens[i][1]
+                    break
+            if gb_index != -1 and isinstance(gb_prop, str) and gb_prop == last_prop:
+                # Ensure all other tokens (excluding that GroupBy and the trailing Show) are Show filters
+                for j, (c, p, v) in enumerate(tokens[:-1]):
+                    if j == gb_index:
+                        continue
+                    if c != "Show" or not isinstance(p, str) or v is None:
+                        return {"objects": []}
+                # Apply all Show filters including the last one; ignore the GroupBy
+                for c, p, v in tokens:
+                    if c != "Show":
+                        continue
+                    typed_objects = [
+                        o for o in typed_objects
+                        if (lambda vv: vv is not None and str(vv) == str(v))(  # inline to avoid repeating try/except
+                            (lambda od: (od.get(p) if isinstance(od, dict) else None))(
+                                (lambda t: (t.to_dict() if hasattr(t, "to_dict") else {}))(o)
+                            )
+                        )
+                    ]
+                return {"objects": [o.to_dict() for o in typed_objects]}
+
+        # General case: apply zero or more Show filters, then optional trailing GroupBy or Show
+        for cmd, prop, value in tokens[:-1]:
+            if cmd != "Show" or not isinstance(prop, str) or value is None:
+                return {"objects": []}
+            typed_objects = [
+                o for o in typed_objects
+                if (lambda vv: vv is not None and str(vv) == str(value))(  # inline to avoid repeating try/except
+                    (lambda od: (od.get(prop) if isinstance(od, dict) else None))(
+                        (lambda t: (t.to_dict() if hasattr(t, "to_dict") else {}))(o)
+                    )
+                )
+            ]
+
+        # Apply trailing token
+        last_cmd, last_prop, last_value = tokens[-1]
+        if last_cmd == "GroupBy" and isinstance(last_prop, str):
+            if allowed_group_fields is not None and last_prop not in allowed_group_fields:
+                return {"objects": []}
+            groups = _group_objects_by_property(base_clean, typed_objects, last_prop, group_icon_filename, make_group, path_str = path_str)
             return {"objects": groups}
-        if command == "Show" and value is not None:
+        if last_cmd == "Show" and isinstance(last_prop, str) and last_value is not None:
             filtered: list[dict[str, object]] = []
             for o in typed_objects:
                 try:
-                    v = o.to_dict().get(prop)
+                    v = o.to_dict().get(last_prop)
                 except Exception:
                     v = None
                 if v is None:
                     continue
-                if str(v) == value:
+                if str(v) == str(last_value):
                     filtered.append(o.to_dict())
             return {"objects": filtered}
-        if command == "Search":
-            if prop == "yes": # recursive
-                return {"objects": []}
-            else: # non-recursive
-                filtered: list[dict[str, object]] = []
-                for o in typed_objects:
-                    # value is prop:string
-                    prop_string = value.split(":")[0]
-                    value_string = value.split(":")[1]
-                    if o.search(prop_string, value_string):
-                        filtered.append(o.to_dict())
-                return {"objects": filtered}
         return {"objects": []}
 
 
@@ -350,12 +426,47 @@ def _parse_command_path(path_str: str) -> tuple[str, Optional[str], Optional[str
     return base, command, prop, value
 
 
+def _parse_command_pipeline(path_str: str) -> tuple[str, list[tuple[str, Optional[str], Optional[str]]]]:
+    """Parse base and all trailing command tokens from a path.
+
+    Returns (base, tokens) where tokens are in left-to-right order as they
+    appear in the path.
+    """
+    base = path_str.lstrip("/")
+    tokens: list[tuple[str, Optional[str], Optional[str]]] = []
+    while base.endswith(">"):
+        try:
+            if "/<" in base:
+                head, tail = base.rsplit("/<", 1)
+                token = tail[:-1]
+                base = head
+            elif base.startswith("<"):
+                # Handle a single leading token with no preceding slash
+                token = base[1:-1]
+                base = ""
+            else:
+                break
+            parts = token.split(":", 2)
+            cmd = parts[0]
+            prop = parts[1] if len(parts) >= 2 else None
+            value = parts[2] if len(parts) == 3 else None
+            tokens.insert(0, (cmd, prop, value))
+        except Exception:
+            break
+    if base == "":
+        base = "/"
+    elif path_str.startswith("/") and not base.startswith("/"):
+        base = "/" + base
+    return base, tokens
+
+
 def _group_objects_by_property(
     base: str,
     objects: Iterable["ProviderObject"],
     prop: str,
     group_icon_filename: str,
     make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
+    path_str: str = "",
 ) -> list[dict[str, object]]:
     counts: dict[object, int] = {}
     for o in objects:
@@ -372,9 +483,11 @@ def _group_objects_by_property(
             grp_obj = make_group(str(value), prop, count)
             results.append(grp_obj.to_dict())
         else:
-            id = f"/{base}/<Show:{prop}:{value}>"
-            if base == "/":
-                id = f"/<Show:{prop}:{value}>"
+            id = f"{path_str}/<Show:{prop}:{value}>"
+            #if base == "/":
+            #    id = f"/<Show:{prop}:{value}>"
+            if id.startswith("//"):
+                id = id[1:]
             grp_obj = WPGroup(
                 id=id,
                 title=str(value),

@@ -117,9 +117,12 @@ class SlurmProvider(ObjectProvider):
             icon_name = f"./resources/{JOB_ICON_PATH.name}"
             typed: List[ProviderObject] = []
             for jid, user, nodes, state, partition in _get_jobs_and_users_for_partition(part):
+                id = f"/{partition}/{jid}"
+                if id.startswith("//"):
+                    id = id[1:]
                 typed.append(
                     WPSlurmJob(
-                        id=f"/{partition}/{jid}",
+                        id=id,
                         title=jid,
                         icon=icon_name,
                         objects=0,
