@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 12px; }
+      h1 { font-size: 18px; margin: 0 0 8px 0; }
+      h2 { font-size: 16px; margin: 0 0 8px 0; font-weight: normal; }
+      .grid { display: grid; grid-template-columns: max-content 1fr; gap: 0px 12px; }
+      .key { color: #666; padding-right: 20px; white-space: nowrap; }
+      pre { background: #f6f8fa; margin: 0; padding: 2px 6px; line-height: 1.2; border-radius: 6px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.4; }
+    </style>
+  </head>
+  <body>
+    <h1>{{ obj.title }}</h1>
+    {% if obj.loaded %}
+    <h2>This software is loaded in your default environment.</h2>
+    {% endif %}
+    {% if obj.details %}
+    <h2><u>Details</u></h2>
+    <div class="grid">
+      <div style="grid-column: 1 / -1; border-bottom: 1px solid #e0e0e0; margin: 2px 0;"></div>
+      {% for line in obj.details.split('\n') if ':' in line %}
+        {% set key, value = line.split(':', 1) %}
+        <div class="key" style="align-self: center">{{ key.strip() }}</div>
+        <div><span class="mono">{{ value.strip() }}</span></div>
+        <div style="grid-column: 1 / -1; border-bottom: 1px solid #e0e0e0; margin: 2px 0;"></div>
+      {% endfor %}
+    </div>
+    {% else %}
+      <div class="grid">
+        <div style="grid-column: 1 / -1; border-bottom: 1px solid #e0e0e0; margin: 2px 0;"></div>
+        {% for key, value in obj.items() %}
+          <div class="key" style="align-self: center">{{ key }}</div>
+          <div>
+            {% if value is mapping or value is sequence %}
+              <span class="mono">{{ json.dumps(value, ensure_ascii=False, indent=2) }}</span>
+            {% else %}
+              <span class="mono">{{ value }}</span>
+            {% endif %}
+          </div>
+            <div style="grid-column: 1 / -1; border-bottom: 1px solid #e0e0e0; margin: 2px 0;"></div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </body>
+  </html>
+
+
