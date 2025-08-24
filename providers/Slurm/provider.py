@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
 import re
+import getpass
 from collections import Counter
 
 # Allow running this file directly: add project root to sys.path
@@ -32,7 +33,10 @@ except Exception:
 PROVIDER_DIR = Path(__file__).resolve().parent
 PARTITION_ICON_PATH = PROVIDER_DIR / "Resources" / "Partition.png"
 JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job.png"
-GROUP_ICON_PATH = PROVIDER_DIR / "Resources" / "IDCard.png"
+PERSON_ICON_PATH = PROVIDER_DIR / "Resources" / "IDCard.png"
+MY_JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job_IDCard.png"
+# Use a python package to get the user id
+MY_USER_ID = getpass.getuser().strip()
 
 
 def _get_slurm_partitions() -> List[str]:
@@ -70,18 +74,11 @@ def _get_my_jobs_count() -> int:
     except Exception:
         return 0
 
-def _get_my_userid() -> str:
-    try:
-        out = subprocess.check_output(["whoami"], text=True)
-        return out.strip()
-    except Exception:
-        return ""
-
 class SlurmProvider(ObjectProvider):
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         partitions = _get_slurm_partitions()
         partition_name = f"./resources/{PARTITION_ICON_PATH.name}"
-        group_name = f"./resources/{GROUP_ICON_PATH.name}"
+        group_name = f"./resources/{PERSON_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
         for part in partitions:
             try:
@@ -97,7 +94,7 @@ class SlurmProvider(ObjectProvider):
             objects.append(obj.to_dict())
         
         obj = WPGroup(
-            id=f"/<Show:userid:{_get_my_userid()}>",
+            id=f"/<Show:userid:{MY_USER_ID}>",
             title="My Jobs",
             icon=group_name,
             objects=int(_get_my_jobs_count()),
@@ -201,7 +198,10 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
                     remaining = f"{h:02d}:{m:02d}:{s:02d}"
             except Exception:
                 remaining = None
-
+            if user == MY_USER_ID:
+                icon_name = f"./resources/{MY_JOB_ICON_PATH.name}"
+            else:
+                icon_name = f"./resources/{JOB_ICON_PATH.name}"
             typed.append(
                 WPSlurmJob(
                     id=job_id,
@@ -226,7 +226,10 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
                 )
             )
         return typed
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()   
+        print(f"Error: {e}", flush=True)
         return []
 
 

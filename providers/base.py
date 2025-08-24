@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 import json
 import sys
 import socketserver
@@ -9,6 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Callable, Iterable
+from PIL import Image  # type: ignore[import-not-found]
 
 
 @dataclass(frozen=True)
@@ -179,6 +181,7 @@ class ObjectProvider(ABC):
         resources_dir: Path = self.options.resources_dir
         try:
             if resources_dir.exists() and resources_dir.is_dir():
+                createCustomIcons = False
                 for entry in sorted(resources_dir.iterdir(), key=lambda p: p.name.lower()):
                     if not entry.is_file():
                         continue
@@ -192,6 +195,63 @@ class ObjectProvider(ABC):
                         icons.append({"filename": filename, "data": b64})
                     except Exception:
                         continue
+                    if entry.name == "IDCard.png":
+                        createCustomIcons = True
+                if createCustomIcons:
+                    # Attempt to composite IDCard.png over each icon at 1/3 scale in bottom-right
+                    idcard_path = resources_dir / "IDCard.png"
+                    idcard_img = None
+                    if Image is not None and idcard_path.exists():
+                        try:
+                            idcard_img = Image.open(str(idcard_path)).convert("RGBA")
+                        except Exception:
+                            idcard_img = None
+                    for entry in sorted(resources_dir.iterdir(), key=lambda p: p.name.lower()):
+                        if not entry.is_file():
+                            continue
+                        if entry.suffix.lower() != ".png":
+                            continue
+                        # Skip the IDCard base itself when creating composites
+                        if entry.name.lower() == "idcard.png":
+                            continue
+                        try:
+                            base_img_data = entry.read_bytes()
+                            if Image is None or idcard_img is None:
+                                # Fallback: if Pillow not available or IDCard not readable, just duplicate original
+                                b64 = base64.b64encode(base_img_data).decode("ascii")
+                                customName = entry.name.replace(".png", "_IDCard.png")
+                                filename = f"./resources/{customName}"
+                                icons.append({"filename": filename, "data": b64})
+                                continue
+                            # Composite using Pillow
+                            base_img = Image.open(BytesIO(base_img_data)).convert("RGBA")
+                            bw, bh = base_img.size
+                            # Scale overlay to 1/3 of the shorter side for a balanced badge size
+                            target = max(1, int(min(bw, bh) / 1.75))
+                            # Preserve aspect ratio; IDCard is square typically, but be safe
+                            ow, oh = idcard_img.size
+                            if ow >= oh:
+                                new_w = target
+                                new_h = max(1, int(oh * (target / float(ow))))
+                            else:
+                                new_h = target
+                                new_w = max(1, int(ow * (target / float(oh))))
+                            overlay = idcard_img.resize((new_w, new_h), Image.LANCZOS)
+                            # Bottom-right placement
+                            x = max(0, bw - new_w)
+                            y = max(0, bh - new_h)
+                            composed = base_img.copy()
+                            composed.alpha_composite(overlay, (x, y))
+                            # Encode to PNG
+                            buf = BytesIO()
+                            composed.save(buf, format="PNG")
+                            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                            customName = entry.name.replace(".png", "_IDCard.png")
+                            filename = f"./resources/{customName}"
+                            icons.append({"filename": filename, "data": b64})
+                        except Exception:
+                            continue
+
         except Exception:
             return []
         return icons
