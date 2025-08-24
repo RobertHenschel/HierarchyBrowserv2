@@ -14,8 +14,17 @@ class WPLmodDependency(ProviderObject):
 
 @dataclass
 class WPLmodSoftware(ProviderObject):
+    loaded: bool = False
+    details: str = ""
+
     @property
     def class_name(self) -> str:  # noqa: D401
         return "WPLmodSoftware"
+
+    def _extra_fields(self) -> dict[str, object]:
+        extra: dict[str, object] = {}
+        extra["loaded"] = bool(self.loaded)
+        extra["details"] = str(self.details)
+        return extra
 
 
