@@ -340,6 +340,8 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar.action_group.setToolTip("Group")
         toolbar.action_group.triggered.connect(self.on_group_action_triggered)
         toolbar.get_state = lambda: (self.nav_stack, self.current_host, self.current_port)
+        # Table toggle
+        toolbar.action_table.triggered.connect(self.on_table_toggle)
         left_layout.addWidget(toolbar)
 
         self.nav_stack: List[Dict[str, str]] = []
@@ -351,16 +353,29 @@ class MainWindow(QtWidgets.QMainWindow):
         self.selected_item: ObjectItemWidget | None = None
         self.current_objects: List[Dict[str, Any]] = []
 
-        scroll = QtWidgets.QScrollArea(left_panel)
-        scroll.setWidgetResizable(True)
-        left_layout.addWidget(scroll)
+        # Container for either grid view or table view
+        self.view_container = QtWidgets.QStackedWidget(left_panel)
+        left_layout.addWidget(self.view_container)
 
+        # Grid view
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
         grid_host = QtWidgets.QWidget()
         grid_layout = QtWidgets.QGridLayout(grid_host)
         grid_layout.setContentsMargins(12, 12, 12, 12)
         grid_layout.setHorizontalSpacing(18)
         grid_layout.setVerticalSpacing(12)
         scroll.setWidget(grid_host)
+        self.view_container.addWidget(scroll)
+
+        # Table view
+        table = QtWidgets.QTableWidget()
+        table.setSortingEnabled(True)
+        table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        table.horizontalHeader().setStretchLastSection(True)
+        self.view_container.addWidget(table)
 
         splitter.addWidget(left_panel)
 
@@ -386,6 +401,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.add_icons_from_info(info)
 
         self.grid_layout = grid_layout
+        self.table_widget = table
+        self.icon_mode = True
         self.load_root(self.root_host, self.root_port)
 
     def navigate_to_path(self, full_path: str) -> None:
@@ -566,25 +583,69 @@ class MainWindow(QtWidgets.QMainWindow):
             if w:
                 w.deleteLater()
 
+    def on_table_toggle(self) -> None:
+        self.icon_mode = not self.icon_mode
+        # 0 = grid scroll, 1 = table
+        self.view_container.setCurrentIndex(0 if self.icon_mode else 1)
+        # Re-render current objects in the active view
+        try:
+            objs = list(self.current_objects)
+        except Exception:
+            objs = []
+        self.populate_objects(objs)
+
     def populate_objects(self, objects: List[Any]) -> None:
-        self.clear_grid()
         # Keep a copy of the raw objects currently displayed for toolbar actions
         try:
             self.current_objects = list(objects)
         except Exception:
             self.current_objects = []
-        columns = 4
-        row = 0
-        col = 0
-        for obj in objects:
-            widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap)
-            widget.activated.connect(self.on_item_activated)
-            widget.clicked.connect(self.on_item_clicked)
-            self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
-            col += 1
-            if col >= columns:
-                col = 0
-                row += 1
+
+        if self.icon_mode:
+            self.clear_grid()
+            columns = 4
+            row = 0
+            col = 0
+            for obj in objects:
+                widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap)
+                widget.activated.connect(self.on_item_activated)
+                widget.clicked.connect(self.on_item_clicked)
+                self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
+                col += 1
+                if col >= columns:
+                    col = 0
+                    row += 1
+        else:
+            # Build union of keys across all objects
+            rows = [_obj_to_dict(o) for o in objects]
+            keys: List[str] = []
+            seen: set[str] = set()
+            for r in rows:
+                if isinstance(r, dict):
+                    for k in r.keys():
+                        if isinstance(k, str) and k not in seen:
+                            seen.add(k)
+                            keys.append(k)
+            # Optional: move core fields to front
+            core = ["class", "id", "title", "objects", "icon"]
+            ordered_keys = [k for k in core if k in seen] + [k for k in keys if k not in core]
+
+            self.table_widget.clear()
+            self.table_widget.setRowCount(len(rows))
+            self.table_widget.setColumnCount(len(ordered_keys))
+            self.table_widget.setHorizontalHeaderLabels(ordered_keys)
+
+            for r_idx, r in enumerate(rows):
+                if not isinstance(r, dict):
+                    continue
+                for c_idx, k in enumerate(ordered_keys):
+                    val = r.get(k)
+                    text = "" if val is None else str(val)
+                    item = QtWidgets.QTableWidgetItem(text)
+                    # Keep original for sorting
+                    item.setData(QtCore.Qt.UserRole, val)
+                    self.table_widget.setItem(r_idx, c_idx, item)
+            self.table_widget.resizeColumnsToContents()
 
     def get_icon_pixmap(self, icon_filename: str) -> QtGui.QPixmap:
         # Normalize key to the expected './resources/Name.png' form used by providers

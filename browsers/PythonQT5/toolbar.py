@@ -39,6 +39,17 @@ class ObjectToolbar(QtWidgets.QToolBar):
             btn2.setFixedSize(22, 22)
             btn2.setIconSize(QtCore.QSize(22, 22))
 
+        # Spacer between icons
+        spacer = QtWidgets.QWidget(self)
+        spacer.setFixedWidth(8)
+        self.addWidget(spacer)
+        # Table toggle button
+        self.action_table = self.addAction(QtGui.QIcon("./Resources/Table.png"), "Table")
+        btn3 = self.widgetForAction(self.action_table)
+        if isinstance(btn3, QtWidgets.QToolButton):
+            btn3.setFixedSize(22, 22)
+            btn3.setIconSize(QtCore.QSize(22, 22))
+
         # Callback to obtain navigation state from host window: (nav_stack, host, port)
         self.get_state: Optional[Callable[[], Tuple[List[Dict[str, str]], str, int]]] = None
         self.action_link.triggered.connect(self._on_create_shortcut)
