@@ -244,6 +244,7 @@ def main() -> None:
             root_name="Slurm Batch System",
             provider_dir=PROVIDER_DIR,
             resources_dir=PROVIDER_DIR / "Resources",
+            customize_icons="Job.png",  # e.g., "Partition.png;Job.png" (semicolon-separated)
         )
     )
     provider.serve(args.host, args.port)

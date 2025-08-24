@@ -24,6 +24,8 @@ class ProviderOptions:
     root_name: str
     provider_dir: Path
     resources_dir: Path
+    # Optional semicolon-separated list of icon base names to customize
+    customize_icons: Optional[str] = None
 
 
 class ObjectProvider(ABC):
@@ -181,7 +183,6 @@ class ObjectProvider(ABC):
         resources_dir: Path = self.options.resources_dir
         try:
             if resources_dir.exists() and resources_dir.is_dir():
-                createCustomIcons = False
                 for entry in sorted(resources_dir.iterdir(), key=lambda p: p.name.lower()):
                     if not entry.is_file():
                         continue
@@ -195,9 +196,7 @@ class ObjectProvider(ABC):
                         icons.append({"filename": filename, "data": b64})
                     except Exception:
                         continue
-                    if entry.name == "IDCard.png":
-                        createCustomIcons = True
-                if createCustomIcons:
+                if self.options.customize_icons:
                     # Attempt to composite IDCard.png over each icon at 1/3 scale in bottom-right
                     idcard_path = resources_dir / "IDCard.png"
                     idcard_img = None
@@ -206,13 +205,12 @@ class ObjectProvider(ABC):
                             idcard_img = Image.open(str(idcard_path)).convert("RGBA")
                         except Exception:
                             idcard_img = None
-                    for entry in sorted(resources_dir.iterdir(), key=lambda p: p.name.lower()):
+                    customize_icons = self.options.customize_icons.split(";")
+                    for entry_name in customize_icons:
+                        entry = resources_dir / entry_name
                         if not entry.is_file():
                             continue
                         if entry.suffix.lower() != ".png":
-                            continue
-                        # Skip the IDCard base itself when creating composites
-                        if entry.name.lower() == "idcard.png":
                             continue
                         try:
                             base_img_data = entry.read_bytes()
