@@ -4,6 +4,8 @@ Visualize an HPC Center and it's resources in a "generic" fashion using objects.
 # Concepts
 - Hierarchical navigation in a "tree like" structure
 - Client/Server architecture
+- Server/Provider runs on an HPC login node and browser on a laptop
+- Both provider and browser can run on an [HPCDesktop](https://github.com/RobertHenschel/HPCDesktop) 
 - Send "objects" via a JSON serialization
 - The browser should be as generic as possible
 - One provider for each data souirce
