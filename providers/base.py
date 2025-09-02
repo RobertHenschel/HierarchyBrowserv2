@@ -265,6 +265,9 @@ class ObjectProvider(ABC):
         make_group: Callable[[str, str, int], "ProviderObject"] | None = None,
     ) -> Dict[str, Any]:
         base_clean, tokens = _parse_command_pipeline(path_str)
+        # Normalize drill-through sequences like <GroupBy:X>/<Show:X:V>
+        # so that subsequent operations work on leaf objects again.
+        tokens = _normalize_groupby_show_tokens(tokens)
         if base_clean == "":
             base_clean = "/"
         # No commands: list base
@@ -516,6 +519,36 @@ def _parse_command_pipeline(path_str: str) -> tuple[str, list[tuple[str, Optiona
     elif path_str.startswith("/") and not base.startswith("/"):
         base = "/" + base
     return base, tokens
+
+def _normalize_groupby_show_tokens(
+    tokens: list[tuple[str, Optional[str], Optional[str]]]
+) -> list[tuple[str, Optional[str], Optional[str]]]:
+    """Collapse GroupBy:X followed immediately by Show:X:V into just Show:X:V.
+
+    This enables pipelines like <GroupBy:cpus>/<Show:cpus:16>/<GroupBy:userid>
+    by removing the grouping step that is semantically just a drill-into of the
+    Show filter, letting subsequent operations apply to leaf objects again.
+    """
+    if not tokens:
+        return tokens
+    normalized: list[tuple[str, Optional[str], Optional[str]]] = []
+    i = 0
+    while i < len(tokens):
+        cmd, prop, value = tokens[i]
+        if (
+            cmd == "GroupBy"
+            and i + 1 < len(tokens)
+            and tokens[i + 1][0] == "Show"
+            and tokens[i + 1][1] == prop
+            and tokens[i + 1][2] is not None
+        ):
+            # Skip GroupBy and keep the Show (drill-into behavior)
+            normalized.append(tokens[i + 1])
+            i += 2
+            continue
+        normalized.append(tokens[i])
+        i += 1
+    return normalized
 
 
 def _group_objects_by_property(
