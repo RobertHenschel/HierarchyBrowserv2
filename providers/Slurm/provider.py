@@ -39,6 +39,18 @@ MY_JOB_ICON_PATH = PROVIDER_DIR / "Resources" / "Job_IDCard.png"
 MY_USER_ID = getpass.getuser().strip()
 
 
+def _rot13(text: str) -> str:
+    """Apply ROT13 transformation to text."""
+    result = []
+    for char in text:
+        if char.isalpha():
+            base = ord('A') if char.isupper() else ord('a')
+            result.append(chr((ord(char) - base + 13) % 26 + base))
+        else:
+            result.append(char)
+    return ''.join(result)
+
+
 def _get_slurm_partitions() -> List[str]:
     # Prefer scontrol for structured output
     try:
@@ -75,6 +87,10 @@ def _get_my_jobs_count() -> int:
         return 0
 
 class SlurmProvider(ObjectProvider):
+    def __init__(self, options: ProviderOptions, scramble_users: bool = False):
+        super().__init__(options)
+        self.scramble_users = scramble_users
+
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         partitions = _get_slurm_partitions()
         partition_name = f"./resources/{PARTITION_ICON_PATH.name}"
@@ -82,7 +98,7 @@ class SlurmProvider(ObjectProvider):
         objects: List[Dict[str, object]] = []
         for part in partitions:
             try:
-                job_count = len(_get_jobs_for_partition(part))
+                job_count = len(_get_jobs_for_partition(part, self.scramble_users))
             except Exception:
                 job_count = 0
             obj = WPSlurmPartition(
@@ -111,7 +127,7 @@ class SlurmProvider(ObjectProvider):
             # Always extract the partition as the first segment, ignoring any command tokens
             segments = base.strip("/").split("/")
             part = segments[0] if segments else ""
-            return _get_jobs_for_partition(part)
+            return _get_jobs_for_partition(part, self.scramble_users)
 
         return self.build_objects_for_path(
             path_str,
@@ -119,7 +135,7 @@ class SlurmProvider(ObjectProvider):
             group_icon_filename=f"./resources/Group.png",
         )
 
-def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
+def _get_jobs_for_partition(partition: str, scramble_users: bool = False) -> List[ProviderObject]:
     """Return typed WPSlurmJob objects for jobs in the given partition.
 
     Uses a single squeue call to retrieve all fields for efficiency.
@@ -146,6 +162,8 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
                 continue
             jid = parts[0].strip()
             user = parts[1].strip()
+            if scramble_users:
+                user = _rot13(user)
             try:
                 nodes = int(parts[2].strip())
             except Exception:
@@ -198,7 +216,11 @@ def _get_jobs_for_partition(partition: str) -> List[ProviderObject]:
                     remaining = f"{h:02d}:{m:02d}:{s:02d}"
             except Exception:
                 remaining = None
-            if user == MY_USER_ID:
+            if scramble_users:
+                my_user_id = _rot13(MY_USER_ID)
+            else:
+                my_user_id = MY_USER_ID
+            if user == my_user_id:
                 icon_name = f"./resources/{MY_JOB_ICON_PATH.name}"
             else:
                 icon_name = f"./resources/{JOB_ICON_PATH.name}"
@@ -237,6 +259,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Slurm Object Provider")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8888, help="Port to bind (default: 8888)")
+    parser.add_argument("--scrambleUsers", action="store_true", help="Apply ROT13 transformation to user names")
     args = parser.parse_args()
 
     provider = SlurmProvider(
@@ -245,7 +268,8 @@ def main() -> None:
             provider_dir=PROVIDER_DIR,
             resources_dir=PROVIDER_DIR / "Resources",
             customize_icons="Job.png",  # e.g., "Partition.png;Job.png" (semicolon-separated)
-        )
+        ),
+        scramble_users=args.scrambleUsers
     )
     provider.serve(args.host, args.port)
 
