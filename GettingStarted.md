@@ -47,4 +47,13 @@ The example uses python virtual environments which require the `venv` package to
   - `Provider listening on 127.0.0.1:9123`
   - `Incoming: {"method":"GetInfo"}`
   - `Incoming: {"method":"GetRootObjects"}`
+- Here is an example of what the browser could look like on a Slurm system with 7 partitions.
+![Alt text](./media/Browser.png)
+
+
+
+
+
+
+
 
