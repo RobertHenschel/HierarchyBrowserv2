@@ -1,13 +1,21 @@
+# Getting started with visualizing Slurm jobs
+This document describes how you can run the Slurm provider on an HPC machine and the browser on your laptop. This setup assumes that the Slurm binaries like `sinfo` and `squeue` are available on the HPC login node.
+This also assumes that you can use SSH with port forwaring to forward a local port from your laptop to the HPC login node. All communication between the provider and the browser will run securely via this SSH tunnel.
 
+The Slurm provider requires Python version 3.7 and will throw an error if you run it with an older version. Check with `python3 --version`.
 
-## Start the SLURM provider
+The browser depends on QT5 for the graphical interface. The QT5 modules will be installed for python.
+
+The example uses python virtual environments which require the `venv` package to be available in python. If you would rather use `conda` you can manually install the packages that are listed in the `requirements.txt` files for the provider and browser.
+
+## Start the SLURM provider on an HPC login node
 - Connect to a login node of your HPC system and forward port 9123 from the login node to your local machine
   - For example, for an HPC called "Nautilus" it would look like this:
   - `ssh -L 9123:localhost:9123 nautilus.university.edu`
   - The above command will both forward the port and give you a shell on the machine.
 - Now install the Slurm provider on the HPC login node.
   - In the SSH session from above, clone the Github repository
-  - ` git clone git@github.com:RobertHenschel/HierarchyBrowserv2.git`
+  - `git clone git@github.com:RobertHenschel/HierarchyBrowserv2.git`
 - Change into the directory of the SLURM provider
   - `cd HierarchyBrowserv2/providers/Slurm/`
 - Create a python virtual environment and activate it
