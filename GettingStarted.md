@@ -26,9 +26,8 @@ The example uses python virtual environments which require the `venv` package to
 - Run the Slurm provider
   - `./provider.py --port 9123`
   - You should see an output like this:
-  - ```  Starting /home/users/henschel/ HierarchyBrowserv2/providers/Slurm/provider.py
-Provider listening on 127.0.0.1:9123
-```
+  - `Starting /home/users/henschel/ HierarchyBrowserv2/providers/Slurm/provider.py`
+  - `Provider listening on 127.0.0.1:9123`
 
 ## Start the browser
 - On your local machine, install the browser.
@@ -45,8 +44,7 @@ Provider listening on 127.0.0.1:9123
   - `./browser.py --port 9123`
 - The browser should start and show all partitions of the batch system.
 - On the provider side, you should see an output like this:
-  - ``` Provider listening on 127.0.0.1:9123
-Incoming: {"method":"GetInfo"}
-Incoming: {"method":"GetRootObjects"}
-  ```
+  - `Provider listening on 127.0.0.1:9123`
+  - `Incoming: {"method":"GetInfo"}`
+  - `Incoming: {"method":"GetRootObjects"}`
 
