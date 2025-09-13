@@ -1,3 +1,8 @@
+
+<a href="./media/Getting_Started.mp4">
+  <img src="./media/Getting_Started.gif" width="600">
+</a>
+
 # Getting started with visualizing Slurm jobs
 This document describes how you can run the Slurm provider on an HPC machine and the browser on your laptop. This setup assumes that the Slurm binaries like `sinfo` and `squeue` are available on the HPC login node.
 This also assumes that you can use SSH with port forwaring to forward a local port from your laptop to the HPC login node. All communication between the provider and the browser will run securely via this SSH tunnel.
