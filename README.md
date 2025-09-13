@@ -16,7 +16,7 @@ https://github.com/user-attachments/assets/e95ea607-a09e-435f-8dd8-44317d127d55
 
 https://github.com/user-attachments/assets/2de41070-8169-47ae-b8f8-59e7c9c4ffdc
 
-https://github.com/user-attachments/assets/f3674a9e-b8a3-4334-8486-c5fcdd8606fc
+https://github.com/user-attachments/assets/1e98ce23-6a0a-4df8-8b9e-651619e8868b
 
 # Icon Resources
 - Icons: https://www.flaticon.com/authors/detailed-straight/lineal-color
