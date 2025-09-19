@@ -174,26 +174,35 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
     diameter = max(22, int(min(composed.width(), composed.height()) * 0.35))
-    margin = 0 # max(2, int(diameter * 0.1))
-    x = composed.width() - diameter - margin
-    y = composed.height() - diameter - margin
+    margin = 0  # keep tight to the corner for consistency
 
-    badge_color = QtGui.QColor("#cfe8ff")  # light pastel blue
-    painter.setBrush(badge_color)
-    painter.setPen(QtCore.Qt.NoPen)
-    painter.drawEllipse(QtCore.QRectF(x, y, diameter, diameter))
-
-    # Draw number text in black, centered in the circle
+    # Configure text styling
     painter.setPen(QtGui.QPen(QtCore.Qt.black))
     font = painter.font()
     font.setBold(True)
-    # Scale font relative to badge; tweak for readability
     font.setPointSizeF(max(9.0, diameter * 0.50))
-    if count >= 100:
-        font.setPointSizeF(max(7.0, diameter * 0.30))
     painter.setFont(font)
-    text = str(count if count < 100 else "99+")
-    painter.drawText(QtCore.QRectF(x, y, diameter, diameter), QtCore.Qt.AlignCenter, text)
+
+    text = str(count)
+    fm = painter.fontMetrics()
+    text_width = fm.horizontalAdvance(text)
+
+    # Create a horizontally expanding ellipse (pill) so full number fits
+    horizontal_padding = max(8, int(diameter * 0.30))
+    badge_width = max(diameter, text_width + 2 * horizontal_padding)
+
+    x = composed.width() - badge_width - margin
+    y = composed.height() - diameter - margin
+
+    # Draw ellipse background
+    badge_color = QtGui.QColor("#cfe8ff")  # light pastel blue
+    painter.setBrush(badge_color)
+    painter.setPen(QtCore.Qt.NoPen)
+    painter.drawEllipse(QtCore.QRectF(x, y, badge_width, diameter))
+
+    # Draw number text in black, centered within ellipse
+    painter.setPen(QtGui.QPen(QtCore.Qt.black))
+    painter.drawText(QtCore.QRectF(x, y, badge_width, diameter), QtCore.Qt.AlignCenter, text)
     painter.end()
     return composed
 
