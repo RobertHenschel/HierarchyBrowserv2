@@ -116,6 +116,7 @@ class SlurmProvider(ObjectProvider):
             try:
                 max_time = None
                 total_nodes = None
+                has_gpus = False
                 for line in config.decode().splitlines():
                     if "MaxTime=" in line:
                         max_time_part = line.split("MaxTime=")[1].split()[0]
@@ -123,6 +124,8 @@ class SlurmProvider(ObjectProvider):
                     if "TotalNodes=" in line:
                         total_nodes_part = line.split("TotalNodes=")[1].split()[0]
                         total_nodes = total_nodes_part
+                    if "gres" in line.lower():
+                        has_gpus = True
             except Exception:
                 pass
             try:
@@ -148,7 +151,8 @@ class SlurmProvider(ObjectProvider):
                 maxtime=max_time,
                 totalnodes=total_nodes,
                 runningjobs=running_jobs,
-                pendingjobs=pending_jobs
+                pendingjobs=pending_jobs,
+                hasgpus=has_gpus
             )
             objects.append(obj.to_dict())
         

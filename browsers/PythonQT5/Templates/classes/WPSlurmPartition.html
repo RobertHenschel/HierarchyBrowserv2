@@ -18,6 +18,9 @@
     {% if obj.isdefault == True %}
       <div class="subtitle" style="color: red;">This is the default partition</div>
     {% endif %}
+    {% if obj.hasgpus == True %}
+      <div class="subtitle" style="color: #ecb41a;">This partition has GPUs</div>
+    {% endif %}
     {% if obj.maxtime %}
       <div class="subtitle">Maximum job runtime:</br>&nbsp;&nbsp;&nbsp;&nbsp;<span id="maxtime-text"></span></div>
       <script>

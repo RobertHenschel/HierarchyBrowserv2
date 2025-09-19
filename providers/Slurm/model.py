@@ -15,6 +15,7 @@ class WPSlurmPartition(ProviderObject):
     totalnodes: Optional[str] = None
     runningjobs: Optional[str] = None
     pendingjobs: Optional[str] = None
+    hasgpus: bool = False
 
     def _extra_fields(self) -> dict[str, object]:
         extra: dict[str, object] = {}
@@ -27,6 +28,7 @@ class WPSlurmPartition(ProviderObject):
             extra["runningjobs"] = self.runningjobs
         if self.pendingjobs is not None:
             extra["pendingjobs"] = self.pendingjobs
+        extra["hasgpus"] = self.hasgpus
         return extra
 
     @property
