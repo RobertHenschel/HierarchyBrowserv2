@@ -120,11 +120,9 @@ class SlurmProvider(ObjectProvider):
                     if "MaxTime=" in line:
                         max_time_part = line.split("MaxTime=")[1].split()[0]
                         max_time = max_time_part
-                        break
                     if "TotalNodes=" in line:
                         total_nodes_part = line.split("TotalNodes=")[1].split()[0]
                         total_nodes = total_nodes_part
-                        break
             except Exception:
                 pass
             try:

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 12px; }
+      h1 { font-size: 20px; margin: 0 0 8px 0; }
+      .subtitle { color: #555; margin-bottom: 12px; }
+      .grid { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; }
+      .key { color: #666; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      pre { background: #f6f8fa; padding: 8px; border-radius: 6px; }
+      .section { margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>Partition: {{ obj.title}}</h1>
+    {% if obj.isdefault == True %}
+      <div class="subtitle" style="color: red;">This is the default partition</div>
+    {% endif %}
+    {% if obj.maxtime %}
+      <div class="subtitle">Maximum job runtime:</br>&nbsp;&nbsp;&nbsp;&nbsp;<span id="maxtime-text"></span></div>
+      <script>
+        (function(){
+          try {
+            var raw = "{{ obj.maxtime|e }}";
+            if (!raw) return;
+            var days = 0;
+            var t = raw;
+            if (raw.indexOf('-') !== -1) {
+              var dash = raw.split('-', 2);
+              var d = parseInt(dash[0], 10);
+              if (!isNaN(d)) days = d;
+              t = dash.length > 1 ? dash[1] : '';
+            }
+            var parts = (t || '').split(':');
+            var h = parseInt(parts[0] || '0', 10);
+            var m = parseInt(parts[1] || '0', 10);
+            if (isNaN(h)) h = 0;
+            if (isNaN(m)) m = 0;
+            var txt = (days > 0 ? (days + ' day' + (days === 1 ? '' : 's') + ', ') : '')
+                      + h + ' hour' + (h === 1 ? '' : 's')
+                      + ' and ' + m + ' minute' + (m === 1 ? '' : 's');
+            var el = document.getElementById('maxtime-text');
+            if (el) el.textContent = txt;
+          } catch (e) {
+            // swallow; leave blank if parsing fails
+          }
+        })();
+      </script>
+    {% endif %}
+    {% if obj.totalnodes %}
+      <div class="subtitle">Nodes in this partition:</br>&nbsp;&nbsp;&nbsp;&nbsp;{{ obj.totalnodes }}</div>
+    {% endif %}
+    {% if obj.runningjobs %}
+      <div class="subtitle">Running jobs:</br>&nbsp;&nbsp;&nbsp;&nbsp;{{ obj.runningjobs }}</div>
+    {% endif %}
+    {% if obj.pendingjobs is not none %}
+      <div class="subtitle">Pending jobs:</br>&nbsp;&nbsp;&nbsp;&nbsp;{{ obj.pendingjobs }}</div>
+    {% endif %}
+
+  </body>
+  </html>
