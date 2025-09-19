@@ -112,12 +112,45 @@ class SlurmProvider(ObjectProvider):
                 job_count = len(_get_jobs_for_partition(part, self.scramble_users))
             except Exception:
                 job_count = 0
+            config = subprocess.check_output(["scontrol", "show", "partition", part])
+            try:
+                max_time = None
+                total_nodes = None
+                for line in config.decode().splitlines():
+                    if "MaxTime=" in line:
+                        max_time_part = line.split("MaxTime=")[1].split()[0]
+                        max_time = max_time_part
+                        break
+                    if "TotalNodes=" in line:
+                        total_nodes_part = line.split("TotalNodes=")[1].split()[0]
+                        total_nodes = total_nodes_part
+                        break
+            except Exception:
+                pass
+            try:
+                jobs = subprocess.check_output(["squeue", "-p", part, "-o", "\"%.8u %.10T\""])
+                running_jobs = 0
+                pending_jobs = 0
+                for line in jobs.splitlines():
+                    if line.strip():
+                        #if line contains "RUNNING" then running_jobs += 1
+                        if b"RUNNING" in line:
+                            running_jobs += 1
+                        else:
+                            pending_jobs += 1
+                pending_jobs -= 1 # because of header line
+            except Exception:
+                pass
             obj = WPSlurmPartition(
                 id=f"/{part}",
                 title=part,
                 icon=partition_name,
                 objects=int(job_count),
                 isdefault=part == default_partition,
+                maxtime=max_time,
+                totalnodes=total_nodes,
+                runningjobs=running_jobs,
+                pendingjobs=pending_jobs
             )
             objects.append(obj.to_dict())
         

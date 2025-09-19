@@ -11,10 +11,22 @@ class WPSlurmPartition(ProviderObject):
     """Represents a Slurm partition in the object tree."""
 
     isdefault: bool = False
+    maxtime: Optional[str] = None
+    totalnodes: Optional[str] = None
+    runningjobs: Optional[str] = None
+    pendingjobs: Optional[str] = None
 
     def _extra_fields(self) -> dict[str, object]:
         extra: dict[str, object] = {}
         extra["isdefault"] = self.isdefault
+        if self.maxtime is not None:
+            extra["maxtime"] = self.maxtime
+        if self.totalnodes is not None:
+            extra["totalnodes"] = self.totalnodes
+        if self.runningjobs is not None:
+            extra["runningjobs"] = self.runningjobs
+        if self.pendingjobs is not None:
+            extra["pendingjobs"] = self.pendingjobs
         return extra
 
     @property
