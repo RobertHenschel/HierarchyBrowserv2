@@ -50,6 +50,16 @@ def _rot13(text: str) -> str:
             result.append(char)
     return ''.join(result)
 
+def _get_default_partition() -> str:
+    try:
+        out = subprocess.check_output(["sinfo", "-h", "-o", "%P"], text=True)
+        lines = out.splitlines()
+        for line in lines:
+            if line.strip().endswith("*"):
+                return line.strip().rstrip("*")
+        return ""
+    except Exception:
+        return ""
 
 def _get_slurm_partitions() -> List[str]:
     # Prefer scontrol for structured output
@@ -93,6 +103,7 @@ class SlurmProvider(ObjectProvider):
 
     def get_root_objects_payload(self) -> Dict[str, List[Dict]]:
         partitions = _get_slurm_partitions()
+        default_partition = _get_default_partition()
         partition_name = f"./resources/{PARTITION_ICON_PATH.name}"
         group_name = f"./resources/{PERSON_ICON_PATH.name}"
         objects: List[Dict[str, object]] = []
@@ -106,6 +117,7 @@ class SlurmProvider(ObjectProvider):
                 title=part,
                 icon=partition_name,
                 objects=int(job_count),
+                isdefault=part == default_partition,
             )
             objects.append(obj.to_dict())
         

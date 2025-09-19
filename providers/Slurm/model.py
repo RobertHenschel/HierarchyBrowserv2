@@ -10,6 +10,13 @@ from providers.base import ProviderObject
 class WPSlurmPartition(ProviderObject):
     """Represents a Slurm partition in the object tree."""
 
+    isdefault: bool = False
+
+    def _extra_fields(self) -> dict[str, object]:
+        extra: dict[str, object] = {}
+        extra["isdefault"] = self.isdefault
+        return extra
+
     @property
     def class_name(self) -> str:  # noqa: D401
         return "WPSlurmPartition"
