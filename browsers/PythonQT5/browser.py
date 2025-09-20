@@ -424,6 +424,13 @@ class MainWindow(QtWidgets.QMainWindow):
         grid_layout.setVerticalSpacing(12)
         scroll.setWidget(grid_host)
         self.view_container.addWidget(scroll)
+        # Capture background clicks in the scroll viewport to clear selection
+        self.grid_host = grid_host
+        self.scroll_area = scroll
+        try:
+            self.scroll_area.viewport().installEventFilter(self)
+        except Exception:
+            pass
 
         # Table view
         table = QtWidgets.QTableWidget()
@@ -905,6 +912,58 @@ class MainWindow(QtWidgets.QMainWindow):
                 pass
         sender.set_selected(True)
         self.selected_item = sender
+
+    def _clear_selection_and_details(self) -> None:
+        # Unselect any selected tile and clear the details view
+        try:
+            if self.selected_item is not None:
+                try:
+                    self.selected_item.set_selected(False)
+                except Exception:
+                    pass
+            self.selected_item = None
+            self.details_panel.clear()
+        except Exception:
+            pass
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:  # type: ignore[override]
+        # Clear selection when clicking on empty area of the icon view
+        try:
+            viewport = getattr(self, "scroll_area", None).viewport() if hasattr(self, "scroll_area") else None
+        except Exception:
+            viewport = None
+        try:
+            if obj is viewport and event.type() == QtCore.QEvent.MouseButtonPress:
+                if isinstance(event, QtGui.QMouseEvent) and event.button() == QtCore.Qt.LeftButton:
+                    # Map click position from viewport to grid_host coordinates
+                    try:
+                        pos_in_view = event.pos()
+                        global_pos = self.scroll_area.viewport().mapToGlobal(pos_in_view)
+                        pos_in_grid = self.grid_host.mapFromGlobal(global_pos)
+                    except Exception:
+                        pos_in_grid = None
+                    w = None
+                    try:
+                        if pos_in_grid is not None:
+                            w = self.grid_host.childAt(pos_in_grid)
+                    except Exception:
+                        w = None
+                    # Ascend to find an ObjectItemWidget, if any
+                    node = w
+                    found_tile = False
+                    try:
+                        while node is not None:
+                            if isinstance(node, ObjectItemWidget):
+                                found_tile = True
+                                break
+                            node = node.parent()
+                    except Exception:
+                        found_tile = False
+                    if not found_tile:
+                        self._clear_selection_and_details()
+        except Exception:
+            pass
+        return super().eventFilter(obj, event)
 
     def perform_openaction(self, obj: Dict[str, Any]) -> None:
         """Execute the object's openaction as if the user activated it.

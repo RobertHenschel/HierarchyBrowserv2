@@ -66,7 +66,6 @@ class DetailsPanel(QtWidgets.QWidget):
     def clear(self) -> None:
         #self._placeholder.setVisible(True)
         self.web.setHtml("<html><body></body></html>")
-        print("Cleared details panel")
         self._placeholder.setVisible(False)
         # force a repaint
         self.update()
