@@ -399,6 +399,11 @@ class MainWindow(QtWidgets.QMainWindow):
         toolbar.get_state = lambda: (self.nav_stack, self.current_host, self.current_port)
         # Table toggle
         toolbar.action_table.triggered.connect(self.on_table_toggle)
+        # Details toggle
+        try:
+            toolbar.action_details.triggered.connect(self.on_details_toggle)
+        except Exception:
+            pass
         left_layout.addWidget(toolbar)
 
         self.nav_stack: List[Dict[str, str]] = []
@@ -449,6 +454,13 @@ class MainWindow(QtWidgets.QMainWindow):
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         splitter.setSizes([600, 300])
+        # Keep a reference and monitor size changes to auto-collapse details
+        self.splitter = splitter
+        self._details_saved_width: int = 300
+        try:
+            self.splitter.splitterMoved.connect(self.on_splitter_moved)
+        except Exception:
+            pass
 
         # Fetch info for root name and icons, then populate
         info = {}
@@ -923,6 +935,52 @@ class MainWindow(QtWidgets.QMainWindow):
                     pass
             self.selected_item = None
             self.details_panel.clear()
+        except Exception:
+            pass
+
+    def on_details_toggle(self) -> None:
+        # Toggle the visibility of the details panel (fold in/out) and manage splitter sizes
+        try:
+            is_visible = self.details_panel.isVisible()
+        except Exception:
+            is_visible = True
+        if is_visible:
+            # Save current width before hiding
+            try:
+                sizes = list(self.splitter.sizes())
+                if len(sizes) >= 2 and sizes[1] > 0:
+                    self._details_saved_width = max(150, sizes[1])
+                total = sum(sizes) if sizes else self.width()
+                self.details_panel.setVisible(False)
+                # Collapse details to near-zero
+                self.splitter.setSizes([max(1, total - 1), 1])
+            except Exception:
+                self.details_panel.setVisible(False)
+        else:
+            # Show and restore a reasonable width
+            self.details_panel.setVisible(True)
+            try:
+                sizes = list(self.splitter.sizes())
+                total = sum(sizes) if sizes else self.width()
+                desired = min(max(150, self._details_saved_width), max(150, int(total * 0.45)))
+                left = max(1, total - desired)
+                self.splitter.setSizes([left, desired])
+            except Exception:
+                pass
+
+    def on_splitter_moved(self, pos: int, index: int) -> None:
+        # Auto-toggle details when collapsed below threshold; track last good width
+        try:
+            sizes = self.splitter.sizes()
+            if len(sizes) < 2:
+                return
+            details_w = sizes[1]
+            if details_w < 10 and self.details_panel.isVisible():
+                # Enter collapsed state, same as toolbar toggle
+                self.on_details_toggle()
+            elif details_w >= 10 and self.details_panel.isVisible():
+                # Update saved width while user resizes
+                self._details_saved_width = details_w
         except Exception:
             pass
 

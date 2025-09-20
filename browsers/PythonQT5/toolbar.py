@@ -50,6 +50,18 @@ class ObjectToolbar(QtWidgets.QToolBar):
             btn3.setFixedSize(22, 22)
             btn3.setIconSize(QtCore.QSize(22, 22))
 
+        # Flexible spacer pushes following actions to the right side
+        right_spacer = QtWidgets.QWidget(self)
+        right_spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+        self.addWidget(right_spacer)
+
+        # Details panel toggle (rightmost)
+        self.action_details = self.addAction(QtGui.QIcon("./Resources/Details.png"), "Details")
+        btn4 = self.widgetForAction(self.action_details)
+        if isinstance(btn4, QtWidgets.QToolButton):
+            btn4.setFixedSize(22, 22)
+            btn4.setIconSize(QtCore.QSize(22, 22))
+
         # Callback to obtain navigation state from host window: (nav_stack, host, port)
         self.get_state: Optional[Callable[[], Tuple[List[Dict[str, str]], str, int]]] = None
         self.action_link.triggered.connect(self._on_create_shortcut)
