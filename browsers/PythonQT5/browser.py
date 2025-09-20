@@ -223,6 +223,8 @@ class ObjectItemWidget(QtWidgets.QWidget):
         self.setToolTip(obj.get("class", ""))
         self._obj = obj
         self._icon_lookup = icon_lookup
+        # Ensure stylesheet backgrounds/borders are painted on QWidget
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
@@ -232,12 +234,16 @@ class ObjectItemWidget(QtWidgets.QWidget):
         icon_label.setAlignment(QtCore.Qt.AlignCenter)
         icon_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
         icon_label.setFixedSize(ICON_BOX_PX, ICON_BOX_PX)
+        icon_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        icon_label.setStyleSheet("border: none; background: transparent;")
 
         title_label = QtWidgets.QLabel(self)
         title_label.setAlignment(QtCore.Qt.AlignCenter)
         title_label.setWordWrap(True)
         title_label.setText(obj.get("title", ""))
         title_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        title_label.setStyleSheet("border: none; background: transparent;")
+        title_label.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
 
         # Determine object count and underline folder-like items
         try:
@@ -270,8 +276,10 @@ class ObjectItemWidget(QtWidgets.QWidget):
         # Add widgets to layout (ensure they are children so they render)
         layout.addWidget(icon_label, alignment=QtCore.Qt.AlignHCenter)
         layout.addWidget(title_label, alignment=QtCore.Qt.AlignHCenter)
-        # Base, non-selected visual so selection doesn't shift layout
-        self.setStyleSheet("border: 1px solid transparent; border-radius: 6px;")
+        # Keep reference for selection styling
+        self._title_label = title_label
+        # Base, unselected visual so selection doesn't shift layout
+        self.setStyleSheet("border: 2px solid transparent; border-radius: 8px; background-color: transparent;")
 
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
 
@@ -280,9 +288,17 @@ class ObjectItemWidget(QtWidgets.QWidget):
 
     def set_selected(self, selected: bool) -> None:
         if selected:
-            self.setStyleSheet("border: 1px solid #007aff; border-radius: 6px; background-color: rgba(0, 122, 255, 0.08);")
+            self.setStyleSheet("border: 2px solid #2D7CFF; border-radius: 8px; background-color: rgba(45, 124, 255, 0.08);")
+            try:
+                self._title_label.setStyleSheet("border: none; background: transparent; color: #2D7CFF;")
+            except Exception:
+                pass
         else:
-            self.setStyleSheet("border: 1px solid transparent; border-radius: 6px; background-color: transparent;")
+            self.setStyleSheet("border: 2px solid transparent; border-radius: 8px; background-color: transparent;")
+            try:
+                self._title_label.setStyleSheet("border: none; background: transparent;")
+            except Exception:
+                pass
 
     def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
         self.clicked.emit(self._obj)
