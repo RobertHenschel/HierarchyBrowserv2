@@ -210,6 +210,7 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
 class ObjectItemWidget(QtWidgets.QWidget):
     activated = pyqtSignal(dict)
     clicked = pyqtSignal(dict)
+    pressed = pyqtSignal(dict)
     contextActionRequested = pyqtSignal(dict, dict)
 
     def __init__(
@@ -223,6 +224,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
         self.setToolTip(obj.get("class", ""))
         self._obj = obj
         self._icon_lookup = icon_lookup
+        self._click_timer: Optional[QtCore.QTimer] = None
         # Ensure stylesheet backgrounds/borders are painted on QWidget
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         layout = QtWidgets.QVBoxLayout(self)
@@ -282,7 +284,14 @@ class ObjectItemWidget(QtWidgets.QWidget):
         self.setStyleSheet("border: 2px solid transparent; border-radius: 8px; background-color: transparent;")
 
     def mouseDoubleClickEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
-
+        # Cancel pending single-click if it hasn't fired yet
+        try:
+            if self._click_timer is not None:
+                self._click_timer.stop()
+                self._click_timer.deleteLater()
+        except Exception:
+            pass
+        self._click_timer = None
         self.activated.emit(self._obj)
         super().mouseDoubleClickEvent(event)
 
@@ -300,8 +309,31 @@ class ObjectItemWidget(QtWidgets.QWidget):
             except Exception:
                 pass
 
-    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
+    def _emit_deferred_click(self) -> None:
+        self._click_timer = None
         self.clicked.emit(self._obj)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
+        # Emit immediate pressed signal for instant visual selection
+        if event.button() == QtCore.Qt.LeftButton:
+            self.pressed.emit(self._obj)
+        # Defer single-click emission until we know it's not a double-click
+        if event.button() == QtCore.Qt.LeftButton:
+            try:
+                if self._click_timer is not None:
+                    self._click_timer.stop()
+                    self._click_timer.deleteLater()
+            except Exception:
+                pass
+            self._click_timer = QtCore.QTimer(self)
+            self._click_timer.setSingleShot(True)
+            try:
+                interval = QtWidgets.QApplication.doubleClickInterval()
+            except Exception:
+                interval = 250
+            self._click_timer.setInterval(int(interval))
+            self._click_timer.timeout.connect(self._emit_deferred_click)
+            self._click_timer.start()
         super().mousePressEvent(event)
 
     def contextMenuEvent(self, event: QtGui.QContextMenuEvent) -> None:  # type: ignore[override]
@@ -634,6 +666,7 @@ class MainWindow(QtWidgets.QMainWindow):
             for obj in objects:
                 widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap)
                 widget.activated.connect(self.on_item_activated)
+                widget.pressed.connect(self.on_item_pressed)
                 widget.clicked.connect(self.on_item_clicked)
                 self.grid_layout.addWidget(widget, row, col, alignment=QtCore.Qt.AlignTop | QtCore.Qt.AlignHCenter)
                 col += 1
@@ -856,18 +889,22 @@ class MainWindow(QtWidgets.QMainWindow):
         sender = self.sender()
         if not isinstance(sender, ObjectItemWidget):
             return
+        # Populate details panel with selected object's properties
+        self.details_panel.set_object(_obj_to_dict(obj))
+
+    def on_item_pressed(self, obj: Dict[str, Any]) -> None:
+        sender = self.sender()
+        if not isinstance(sender, ObjectItemWidget):
+            return
         if self.selected_item is sender:
             return
         if self.selected_item is not None:
             try:
                 self.selected_item.set_selected(False)
             except RuntimeError:
-                # Previously selected widget was already deleted by a reload
                 pass
         sender.set_selected(True)
         self.selected_item = sender
-        # Populate details panel with selected object's properties
-        self.details_panel.set_object(_obj_to_dict(obj))
 
     def perform_openaction(self, obj: Dict[str, Any]) -> None:
         """Execute the object's openaction as if the user activated it.
