@@ -700,6 +700,12 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
     def load_root(self, host: Optional[str] = None, port: Optional[int] = None) -> None:
+        # Clear selection and details when navigating to a new root/path
+        try:
+            self.selected_item = None
+            self.details_panel.clear()
+        except Exception:
+            pass
         objects = []
         try:
             objects = fetch_root_objects(host, port)
@@ -719,6 +725,12 @@ class MainWindow(QtWidgets.QMainWindow):
             data = {}
         objects = data.get("objects", []) if isinstance(data, dict) else []
         self.populate_objects(objects)
+        # Clear selection and details when navigating into a child path
+        try:
+            self.selected_item = None
+            self.details_panel.clear()
+        except Exception:
+            pass
 
     def on_item_activated(self, obj: Dict[str, Any]) -> None:
         # If object defines an openaction, perform it and stop

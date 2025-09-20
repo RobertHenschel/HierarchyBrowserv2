@@ -64,8 +64,12 @@ class DetailsPanel(QtWidgets.QWidget):
         self.tpl_mgr = _TemplateManager(self.templates_root)
 
     def clear(self) -> None:
-        self._placeholder.setVisible(True)
-        self.web.setHtml("")
+        #self._placeholder.setVisible(True)
+        self.web.setHtml("<html><body></body></html>")
+        print("Cleared details panel")
+        self._placeholder.setVisible(False)
+        # force a repaint
+        self.update()
 
     def set_object(self, obj: Dict[str, Any]) -> None:
         try:
