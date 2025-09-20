@@ -35,6 +35,26 @@ class WPSlurmPartition(ProviderObject):
     def class_name(self) -> str:  # noqa: D401
         return "WPSlurmPartition"
 
+    @classmethod
+    def from_dict(cls, payload: dict) -> "WPSlurmPartition":
+        """Build a WPSlurmPartition from a dict produced by to_dict().
+
+        Missing fields are defaulted, and types are normalized defensively.
+        """
+        icon_value = payload.get("icon")
+        return cls(
+            id=str(payload.get("id", "/")),
+            title=str(payload.get("title", "")),
+            icon=(icon_value if isinstance(icon_value, str) else None),
+            objects=int(payload.get("objects", 0)),
+            isdefault=bool(payload.get("isdefault", False)),
+            maxtime=(payload.get("maxtime") if isinstance(payload.get("maxtime"), str) else None),
+            totalnodes=(payload.get("totalnodes") if isinstance(payload.get("totalnodes"), str) else None),
+            runningjobs=(payload.get("runningjobs") if isinstance(payload.get("runningjobs"), str) else None),
+            pendingjobs=(payload.get("pendingjobs") if isinstance(payload.get("pendingjobs"), str) else None),
+            hasgpus=bool(payload.get("hasgpus", False)),
+        )
+
 
 @dataclass
 class WPSlurmJob(ProviderObject):

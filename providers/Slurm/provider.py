@@ -174,6 +174,20 @@ class SlurmProvider(ObjectProvider):
             # Always extract the partition as the first segment, ignoring any command tokens
             segments = base.strip("/").split("/")
             part = segments[0] if segments else ""
+            if part == "":
+                dictt = self.get_root_objects_payload()
+                objs = dictt.get("objects", []) if isinstance(dictt, dict) else []
+                typed: List[ProviderObject] = []
+                for od in objs:
+                    try:
+                        if not isinstance(od, dict):
+                            continue
+                        if od.get("class") != "WPSlurmPartition":
+                            continue
+                        typed.append(WPSlurmPartition.from_dict(od))
+                    except Exception:
+                        continue
+                return typed
             return _get_jobs_for_partition(part, self.scramble_users)
 
         return self.build_objects_for_path(
