@@ -696,6 +696,10 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             objs = []
         self.populate_objects(objs)
+        # Apply zoom to the newly active view
+        if not self.icon_mode:
+            # Switching to table mode - ensure zoom is applied
+            self._zoom_table()
 
     def populate_objects(self, objects: List[Any]) -> None:
         # Keep a copy of the raw objects currently displayed for toolbar actions
@@ -1184,6 +1188,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Apply zoom to details panel
         self._zoom_details_panel()
         
+        # Apply zoom to table view
+        self._zoom_table()
+        
         # Repopulate grid to apply zoom to icon labels
         if self.icon_mode:
             try:
@@ -1218,6 +1225,41 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.details_panel.set_object(self._current_details_obj, self._zoom_level)
                 except Exception:
                     pass
+        except Exception:
+            pass
+
+    def _zoom_table(self) -> None:
+        """Apply zoom level to table view fonts"""
+        try:
+            base_size = 9.0  # Base font size for table
+            scaled_size = base_size * self._zoom_level
+            
+            # Apply font to the table widget itself
+            table_font = self.table_widget.font()
+            table_font.setPointSizeF(scaled_size)
+            self.table_widget.setFont(table_font)
+            
+            # Apply font to headers
+            horizontal_header = self.table_widget.horizontalHeader()
+            if horizontal_header:
+                header_font = horizontal_header.font()
+                header_font.setPointSizeF(scaled_size)
+                horizontal_header.setFont(header_font)
+            
+            vertical_header = self.table_widget.verticalHeader()
+            if vertical_header:
+                header_font = vertical_header.font()
+                header_font.setPointSizeF(scaled_size)
+                vertical_header.setFont(header_font)
+            
+            # Update row height to accommodate new font size
+            row_height = int(scaled_size * 1.8)  # 1.8x font size for comfortable row height
+            self.table_widget.verticalHeader().setDefaultSectionSize(row_height)
+            
+            # Resize columns to fit new content if currently in table mode
+            if not self.icon_mode:
+                self.table_widget.resizeColumnsToContents()
+                
         except Exception:
             pass
 
