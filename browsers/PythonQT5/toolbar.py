@@ -55,6 +55,30 @@ class ObjectToolbar(QtWidgets.QToolBar):
         right_spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
         self.addWidget(right_spacer)
 
+        # Zoom out button
+        self.action_zoom_out = self.addAction(QtGui.QIcon("./Resources/ZoomOut.png"), "Zoom Out")
+        btn_zoom_out = self.widgetForAction(self.action_zoom_out)
+        if isinstance(btn_zoom_out, QtWidgets.QToolButton):
+            btn_zoom_out.setFixedSize(22, 22)
+            btn_zoom_out.setIconSize(QtCore.QSize(22, 22))
+
+        # Small spacer between zoom buttons
+        spacer_zoom = QtWidgets.QWidget(self)
+        spacer_zoom.setFixedWidth(4)
+        self.addWidget(spacer_zoom)
+
+        # Zoom in button
+        self.action_zoom_in = self.addAction(QtGui.QIcon("./Resources/ZoomIn.png"), "Zoom In")
+        btn_zoom_in = self.widgetForAction(self.action_zoom_in)
+        if isinstance(btn_zoom_in, QtWidgets.QToolButton):
+            btn_zoom_in.setFixedSize(22, 22)
+            btn_zoom_in.setIconSize(QtCore.QSize(22, 22))
+
+        # Spacer between zoom buttons and details button
+        spacer_details = QtWidgets.QWidget(self)
+        spacer_details.setFixedWidth(8)
+        self.addWidget(spacer_details)
+
         # Details panel toggle (rightmost)
         self.action_details = self.addAction(QtGui.QIcon("./Resources/Details.png"), "Details")
         btn4 = self.widgetForAction(self.action_details)

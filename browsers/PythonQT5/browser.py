@@ -408,6 +408,15 @@ class MainWindow(QtWidgets.QMainWindow):
             toolbar.action_details.triggered.connect(self.on_details_toggle)
         except Exception:
             pass
+        # Zoom buttons
+        try:
+            toolbar.action_zoom_in.triggered.connect(self._zoom_in)
+            toolbar.action_zoom_out.triggered.connect(self._zoom_out)
+            # Set tooltips with keyboard shortcuts
+            toolbar.action_zoom_in.setToolTip("Zoom In (⌘+)")
+            toolbar.action_zoom_out.setToolTip("Zoom Out (⌘-)")
+        except Exception:
+            pass
         left_layout.addWidget(toolbar)
 
         self.nav_stack: List[Dict[str, str]] = []
