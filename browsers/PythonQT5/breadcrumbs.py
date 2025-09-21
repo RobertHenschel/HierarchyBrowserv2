@@ -24,7 +24,7 @@ class BreadcrumbBar(QtWidgets.QWidget):
         self.setPalette(pal)
         self.setFixedHeight(28)
 
-    def set_path(self, parts: list[str], bold_indices: set[int] | None = None) -> None:
+    def set_path(self, parts: list[str], bold_indices: set[int] | None = None, zoom_level: float = 1.0) -> None:
         # Clear
         while self._h.count():
             item = self._h.takeAt(0)
@@ -38,6 +38,9 @@ class BreadcrumbBar(QtWidgets.QWidget):
             label = QtWidgets.QLabel(part, self)
             font = label.font()
             font.setBold(idx in bold_set)
+            # Apply zoom to font size
+            base_size = 9.0  # Base font size
+            font.setPointSizeF(base_size * zoom_level)
             label.setFont(font)
             label.setCursor(QtCore.Qt.PointingHandCursor)
             # Capture index for click
@@ -47,6 +50,10 @@ class BreadcrumbBar(QtWidgets.QWidget):
             self._h.addWidget(label)
             if idx != len(parts) - 1:
                 sep = QtWidgets.QLabel("›", self)
+                # Apply zoom to separator as well
+                sep_font = sep.font()
+                sep_font.setPointSizeF(base_size * zoom_level)
+                sep.setFont(sep_font)
                 self._h.addWidget(sep)
         self._h.addStretch(1)
 

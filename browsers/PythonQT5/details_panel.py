@@ -70,12 +70,17 @@ class DetailsPanel(QtWidgets.QWidget):
         # force a repaint
         self.update()
 
-    def set_object(self, obj: Dict[str, Any]) -> None:
+    def set_object(self, obj: Dict[str, Any], zoom_level: float = 1.0) -> None:
         try:
             obj_class = obj.get("class")
             template_name = self.tpl_mgr.select_template_for_class(obj_class)
             html = self.tpl_mgr.render(template_name, {"obj": obj, "json": json})
-            self.web.setHtml(html)
+            
+            # Inject CSS to scale font sizes based on zoom level
+            base_font_size = 9  # Match the Qt label base size
+            scaled_html = self._inject_zoom_css(html, base_font_size, zoom_level)
+            
+            self.web.setHtml(scaled_html)
             self._placeholder.setVisible(False)
         except Exception:
             # Fallback to a simple JSON dump if rendering fails
@@ -86,5 +91,34 @@ class DetailsPanel(QtWidgets.QWidget):
             self.web.setHtml("")
             layout.addWidget(safe)
             self._placeholder.setVisible(False)
+
+    def _inject_zoom_css(self, html: str, base_font_size: float, zoom_level: float) -> str:
+        """Inject CSS to scale font sizes consistently with the Qt UI"""
+        try:
+            # Calculate scaled font sizes
+            body_size = base_font_size * zoom_level
+            h1_size = (base_font_size * 1.4) * zoom_level  # Slightly larger than body
+            
+            # CSS to override template font sizes
+            zoom_css = f"""
+            <style>
+            body {{ font-size: {body_size}px !important; }}
+            h1 {{ font-size: {h1_size}px !important; }}
+            .subtitle {{ font-size: {body_size}px !important; }}
+            .key {{ font-size: {body_size}px !important; }}
+            .mono {{ font-size: {body_size * 0.9}px !important; }}
+            </style>
+            """
+            
+            # Insert the CSS before the closing </head> tag
+            if "</head>" in html:
+                html = html.replace("</head>", zoom_css + "</head>")
+            else:
+                # If no head tag, insert at the beginning
+                html = zoom_css + html
+                
+            return html
+        except Exception:
+            return html
 
 

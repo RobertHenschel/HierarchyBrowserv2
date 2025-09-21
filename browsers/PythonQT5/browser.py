@@ -218,6 +218,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
         obj: Dict[str, Any],
         parent: QtWidgets.QWidget | None = None,
         icon_lookup: Optional[Callable[[str], QtGui.QPixmap]] = None,
+        zoom_level: float = 1.0,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("objectItemWidget")
@@ -254,6 +255,9 @@ class ObjectItemWidget(QtWidgets.QWidget):
             objects_count = 0
         title_font = title_label.font()
         title_font.setUnderline(objects_count > 0)
+        # Apply zoom to font size
+        base_size = 9.0  # Base font size
+        title_font.setPointSizeF(base_size * zoom_level)
         title_label.setFont(title_font)
 
         # Visual affordance for clickable folder-like items
@@ -439,6 +443,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Track current computed column count and debounce reflow
         self._grid_columns: int = 0
         self._reflow_timer: Optional[QtCore.QTimer] = None
+        # Zoom level for UI scaling (1.0 = normal, 1.2 = 120%, etc.)
+        self._zoom_level: float = 1.0
+        # Track current object displayed in details panel
+        self._current_details_obj: Optional[Dict[str, Any]] = None
 
         # Table view
         table = QtWidgets.QTableWidget()
@@ -482,6 +490,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.grid_layout = grid_layout
         self.table_widget = table
         self.icon_mode = True
+        
+        # Set up zoom keyboard shortcuts
+        self._setup_zoom_shortcuts()
+        
+        # Restore saved settings
+        self._restore_settings()
+        
         self.load_root(self.root_host, self.root_port)
 
     def navigate_to_path(self, full_path: str) -> None:
@@ -692,7 +707,7 @@ class MainWindow(QtWidgets.QMainWindow):
             row = 0
             col = 0
             for obj in objects:
-                widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap)
+                widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap, zoom_level=self._zoom_level)
                 widget.activated.connect(self.on_item_activated)
                 widget.pressed.connect(self.on_item_pressed)
                 widget.clicked.connect(self.on_item_clicked)
@@ -764,6 +779,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Clear selection and details when navigating to a new root/path
         try:
             self.selected_item = None
+            self._current_details_obj = None
             self.details_panel.clear()
         except Exception:
             pass
@@ -789,6 +805,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Clear selection and details when navigating into a child path
         try:
             self.selected_item = None
+            self._current_details_obj = None
             self.details_panel.clear()
         except Exception:
             pass
@@ -918,7 +935,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if not isinstance(sender, ObjectItemWidget):
             return
         # Populate details panel with selected object's properties
-        self.details_panel.set_object(_obj_to_dict(obj))
+        obj_dict = _obj_to_dict(obj)
+        self._current_details_obj = obj_dict
+        self.details_panel.set_object(obj_dict, self._zoom_level)
 
     def on_item_pressed(self, obj: Dict[str, Any]) -> None:
         sender = self.sender()
@@ -943,6 +962,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 except Exception:
                     pass
             self.selected_item = None
+            self._current_details_obj = None
             self.details_panel.clear()
         except Exception:
             pass
@@ -976,6 +996,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.splitter.setSizes([left, desired])
             except Exception:
                 pass
+        
+        # Save the new visibility state
+        try:
+            settings = QtCore.QSettings("HierarchyBrowser", "MainWindow")
+            settings.setValue("detailsVisible", self.details_panel.isVisible())
+        except Exception:
+            pass
 
     def on_splitter_moved(self, pos: int, index: int) -> None:
         # Auto-toggle details when collapsed below threshold; track last good width
@@ -990,6 +1017,12 @@ class MainWindow(QtWidgets.QMainWindow):
             elif details_w >= 10 and self.details_panel.isVisible():
                 # Update saved width while user resizes
                 self._details_saved_width = details_w
+                # Save splitter sizes
+                try:
+                    settings = QtCore.QSettings("HierarchyBrowser", "MainWindow")
+                    settings.setValue("splitterSizes", sizes)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -1037,6 +1070,152 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
         return super().eventFilter(obj, event)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:  # type: ignore[override]
+        # Save settings before closing
+        self._save_settings()
+        super().closeEvent(event)
+
+    def _save_settings(self) -> None:
+        try:
+            settings = QtCore.QSettings("HierarchyBrowser", "MainWindow")
+            settings.setValue("geometry", self.saveGeometry())
+            settings.setValue("windowState", self.saveState())
+            settings.setValue("zoomLevel", self._zoom_level)
+            settings.setValue("detailsVisible", self.details_panel.isVisible())
+            if hasattr(self, 'splitter'):
+                settings.setValue("splitterSizes", self.splitter.sizes())
+        except Exception:
+            pass
+
+    def _restore_settings(self) -> None:
+        try:
+            settings = QtCore.QSettings("HierarchyBrowser", "MainWindow")
+            
+            # Restore window geometry and state
+            geometry = settings.value("geometry")
+            if geometry:
+                self.restoreGeometry(geometry)
+            
+            state = settings.value("windowState")
+            if state:
+                self.restoreState(state)
+            
+            # Restore zoom level
+            zoom_level = settings.value("zoomLevel", 1.0, type=float)
+            if zoom_level != 1.0:
+                self._zoom_level = zoom_level
+                self._apply_zoom()
+            
+            # Restore details panel visibility
+            details_visible = settings.value("detailsVisible", True, type=bool)
+            if not details_visible:
+                self.details_panel.setVisible(False)
+            
+            # Restore splitter sizes
+            if hasattr(self, 'splitter'):
+                splitter_sizes = settings.value("splitterSizes")
+                if splitter_sizes:
+                    try:
+                        # Convert to list of ints if needed
+                        if isinstance(splitter_sizes, list):
+                            sizes = [int(s) for s in splitter_sizes]
+                            self.splitter.setSizes(sizes)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    def _setup_zoom_shortcuts(self) -> None:
+        # Use standard zoom shortcuts that work cross-platform
+        # Qt automatically maps these to Cmd+ on Mac and Ctrl+ on other platforms
+        
+        # Zoom in: Standard zoom in shortcut
+        zoom_in_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence.ZoomIn, self)
+        zoom_in_shortcut.activated.connect(self._zoom_in)
+        
+        # Zoom out: Standard zoom out shortcut  
+        zoom_out_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence.ZoomOut, self)
+        zoom_out_shortcut.activated.connect(self._zoom_out)
+        
+        # Also add Ctrl/Cmd + Plus for zoom in (since + might require shift)
+        zoom_in_plus = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+="), self)
+        zoom_in_plus.activated.connect(self._zoom_in)
+        
+        # Reset zoom: Ctrl/Cmd+0
+        zoom_reset_shortcut = QtWidgets.QShortcut(QtGui.QKeySequence("Ctrl+0"), self)
+        zoom_reset_shortcut.activated.connect(self._zoom_reset)
+
+    def _zoom_in(self) -> None:
+        self._zoom_level = min(3.0, self._zoom_level * 1.1)
+        self._apply_zoom()
+        self._save_zoom_level()
+
+    def _zoom_out(self) -> None:
+        self._zoom_level = max(0.5, self._zoom_level / 1.1)
+        self._apply_zoom()
+        self._save_zoom_level()
+
+    def _zoom_reset(self) -> None:
+        self._zoom_level = 1.0
+        self._apply_zoom()
+        self._save_zoom_level()
+
+    def _save_zoom_level(self) -> None:
+        try:
+            settings = QtCore.QSettings("HierarchyBrowser", "MainWindow")
+            settings.setValue("zoomLevel", self._zoom_level)
+        except Exception:
+            pass
+
+    def _apply_zoom(self) -> None:
+        # Apply zoom to breadcrumb
+        self._zoom_breadcrumb()
+        
+        # Apply zoom to details panel
+        self._zoom_details_panel()
+        
+        # Repopulate grid to apply zoom to icon labels
+        if self.icon_mode:
+            try:
+                objs = list(self.current_objects)
+                self.populate_objects(objs)
+            except Exception:
+                pass
+
+    def _zoom_breadcrumb(self) -> None:
+        # Trigger breadcrumb refresh with current zoom level
+        self._update_breadcrumb()
+
+    def _zoom_details_panel(self) -> None:
+        try:
+            # Update Details label font
+            title_widget = None
+            layout = self.details_panel.layout()
+            if layout and layout.count() > 0:
+                item = layout.itemAt(0)
+                if item and item.widget():
+                    title_widget = item.widget()
+            
+            if title_widget and isinstance(title_widget, QtWidgets.QLabel):
+                font = title_widget.font()
+                base_size = 9  # Assume base font size
+                font.setPointSizeF(base_size * self._zoom_level)
+                title_widget.setFont(font)
+            
+            # Refresh the current object in details panel with new zoom level
+            if self._current_details_obj is not None:
+                try:
+                    self.details_panel.set_object(self._current_details_obj, self._zoom_level)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _get_zoomed_font(self, base_font: QtGui.QFont, base_size: float = 9.0) -> QtGui.QFont:
+        font = QtGui.QFont(base_font)
+        font.setPointSizeF(base_size * self._zoom_level)
+        return font
 
     def _tile_width_hint(self) -> int:
         # Estimate a reasonable tile width using icon size and typical text width
@@ -1188,7 +1367,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     bold_indices.add(idx)
         except Exception:
             pass
-        self.breadcrumb.set_path(parts, bold_indices)
+        self.breadcrumb.set_path(parts, bold_indices, self._zoom_level)
 
 
 def fetch_objects_for_id(object_id: str, host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
