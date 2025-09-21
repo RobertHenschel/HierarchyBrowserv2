@@ -424,9 +424,9 @@ class MainWindow(QtWidgets.QMainWindow):
         scroll.setWidgetResizable(True)
         grid_host = QtWidgets.QWidget()
         grid_layout = QtWidgets.QGridLayout(grid_host)
-        grid_layout.setContentsMargins(12, 12, 12, 12)
-        grid_layout.setHorizontalSpacing(18)
-        grid_layout.setVerticalSpacing(12)
+        grid_layout.setContentsMargins(4, 4, 4, 4)
+        grid_layout.setHorizontalSpacing(6)
+        grid_layout.setVerticalSpacing(4)
         scroll.setWidget(grid_host)
         self.view_container.addWidget(scroll)
         # Capture background clicks in the scroll viewport to clear selection
@@ -436,6 +436,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.scroll_area.viewport().installEventFilter(self)
         except Exception:
             pass
+        # Track current computed column count and debounce reflow
+        self._grid_columns: int = 0
+        self._reflow_timer: Optional[QtCore.QTimer] = None
 
         # Table view
         table = QtWidgets.QTableWidget()
@@ -679,7 +682,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.icon_mode:
             self.clear_grid()
-            columns = 4
+            # Compute dynamic column count based on available viewport width
+            try:
+                viewport_w = self.scroll_area.viewport().width()
+            except Exception:
+                viewport_w = self.width()
+            columns = self._compute_columns(viewport_w)
+            self._grid_columns = columns
             row = 0
             col = 0
             for obj in objects:
@@ -990,6 +999,12 @@ class MainWindow(QtWidgets.QMainWindow):
             viewport = getattr(self, "scroll_area", None).viewport() if hasattr(self, "scroll_area") else None
         except Exception:
             viewport = None
+        # Reflow icon grid when the viewport is resized (e.g., window or splitter changes)
+        try:
+            if obj is viewport and event.type() == QtCore.QEvent.Resize:
+                self._schedule_reflow()
+        except Exception:
+            pass
         try:
             if obj is viewport and event.type() == QtCore.QEvent.MouseButtonPress:
                 if isinstance(event, QtGui.QMouseEvent) and event.button() == QtCore.Qt.LeftButton:
@@ -1022,6 +1037,58 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
         return super().eventFilter(obj, event)
+
+    def _tile_width_hint(self) -> int:
+        # Estimate a reasonable tile width using icon size and typical text width
+        try:
+            fm = self.fontMetrics()
+            text_width = fm.horizontalAdvance("M" * 8)
+        except Exception:
+            text_width = 80
+        base = max(ICON_BOX_PX, text_width)
+        # Add minimal horizontal padding/margins from the item (layout margins etc.)
+        return base + 8
+
+    def _compute_columns(self, viewport_width: int) -> int:
+        try:
+            margins = self.grid_layout.contentsMargins()
+            spacing = self.grid_layout.horizontalSpacing()
+            spacing = 0 if spacing is None else max(0, spacing)
+            available = max(0, viewport_width - (margins.left() + margins.right()))
+        except Exception:
+            available = max(0, viewport_width - 8)
+            spacing = 6
+        tile = max(1, self._tile_width_hint())
+        # Compute how many tiles fit given spacing between them
+        columns = max(1, int((available + spacing) // (tile + spacing)))
+        return columns
+
+    def _schedule_reflow(self) -> None:
+        try:
+            if self._reflow_timer is None:
+                self._reflow_timer = QtCore.QTimer(self)
+                self._reflow_timer.setSingleShot(True)
+                self._reflow_timer.timeout.connect(self._reflow_grid)
+            # Small delay to coalesce rapid resize events
+            self._reflow_timer.start(50)
+        except Exception:
+            # Fallback: immediate reflow if timer setup fails
+            self._reflow_grid()
+
+    def _reflow_grid(self) -> None:
+        if not self.icon_mode:
+            return
+        try:
+            viewport_w = self.scroll_area.viewport().width()
+        except Exception:
+            viewport_w = self.width()
+        new_cols = self._compute_columns(viewport_w)
+        if new_cols != self._grid_columns:
+            try:
+                objs = list(self.current_objects)
+            except Exception:
+                objs = []
+            self.populate_objects(objs)
 
     def perform_openaction(self, obj: Dict[str, Any]) -> None:
         """Execute the object's openaction as if the user activated it.
