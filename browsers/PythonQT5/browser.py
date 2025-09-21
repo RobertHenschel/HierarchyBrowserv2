@@ -1234,8 +1234,8 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             text_width = 80
         base = max(ICON_BOX_PX, text_width)
-        # Add minimal horizontal padding/margins from the item (layout margins etc.)
-        return base + 8
+        # Add widget layout margins (4px left + 4px right = 8px) plus some padding
+        return base + 16
 
     def _compute_columns(self, viewport_width: int) -> int:
         try:
@@ -1247,8 +1247,21 @@ class MainWindow(QtWidgets.QMainWindow):
             available = max(0, viewport_width - 8)
             spacing = 6
         tile = max(1, self._tile_width_hint())
-        # Compute how many tiles fit given spacing between them
-        columns = max(1, int((available + spacing) // (tile + spacing)))
+        
+        # Correct formula: For N columns, we need N*tile_width + (N-1)*spacing <= available
+        # Solving: N <= (available + spacing) / (tile + spacing)
+        # But we need to be conservative to avoid overflow
+        if available <= tile:
+            return 1
+        
+        # Calculate maximum columns that definitely fit
+        columns = max(1, int(available // (tile + spacing)))
+        
+        # Verify the calculation fits within available width
+        total_width_needed = columns * tile + (columns - 1) * spacing
+        if total_width_needed > available and columns > 1:
+            columns -= 1
+            
         return columns
 
     def _schedule_reflow(self) -> None:
