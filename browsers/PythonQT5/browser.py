@@ -173,36 +173,47 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     painter = QtGui.QPainter(composed)
     painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
-    diameter = max(22, int(min(composed.width(), composed.height()) * 0.35))
-    margin = 0  # keep tight to the corner for consistency
+    # Base dimensions for the badge
+    base_height = max(18, int(min(composed.width(), composed.height()) * 0.28))
+    margin = 2  # small margin from edge
 
     # Configure text styling
     painter.setPen(QtGui.QPen(QtCore.Qt.black))
     font = painter.font()
     font.setBold(True)
-    font.setPointSizeF(max(9.0, diameter * 0.50))
+    font.setPointSizeF(max(8.0, base_height * 0.60))
     painter.setFont(font)
 
     text = str(count)
     fm = painter.fontMetrics()
     text_width = fm.horizontalAdvance(text)
+    text_height = fm.height()
 
-    # Create a horizontally expanding ellipse (pill) so full number fits
-    horizontal_padding = max(8, int(diameter * 0.30))
-    badge_width = max(diameter, text_width + 2 * horizontal_padding)
-
+    # Create a rounded rectangle that hugs the text more closely
+    horizontal_padding = max(4, int(text_width * 0.25))  # 25% padding on each side
+    vertical_padding = max(2, int(text_height * 0.15))   # 15% padding top/bottom
+    
+    badge_width = text_width + 2 * horizontal_padding
+    badge_height = max(base_height, text_height + 2 * vertical_padding)
+    
+    # Position badge in bottom-right corner
     x = composed.width() - badge_width - margin
-    y = composed.height() - diameter - margin
+    y = composed.height() - badge_height - margin
 
-    # Draw ellipse background
+    # Draw rounded rectangle background
     badge_color = QtGui.QColor("#cfe8ff")  # light pastel blue
     painter.setBrush(badge_color)
     painter.setPen(QtCore.Qt.NoPen)
-    painter.drawEllipse(QtCore.QRectF(x, y, badge_width, diameter))
+    
+    # Corner radius is proportional to height for nice rounded corners
+    corner_radius = min(badge_height * 0.35, badge_width * 0.25)
+    painter.drawRoundedRect(QtCore.QRectF(x, y, badge_width, badge_height), 
+                           corner_radius, corner_radius)
 
-    # Draw number text in black, centered within ellipse
+    # Draw number text in black, centered within rectangle
     painter.setPen(QtGui.QPen(QtCore.Qt.black))
-    painter.drawText(QtCore.QRectF(x, y, badge_width, diameter), QtCore.Qt.AlignCenter, text)
+    painter.drawText(QtCore.QRectF(x, y, badge_width, badge_height), 
+                    QtCore.Qt.AlignCenter, text)
     painter.end()
     return composed
 
