@@ -3,13 +3,13 @@
     "id": "/ComputeSystems/Quartz/SlurmBatchSystem",
     "icon": "./Resources/Slurm.png",
     "title": "Batch System",
-    "description": "The batch system for running jobs on Quartz.",
+    "description": "Slurm is used as the batch system for running jobs on Quartz. A batch system is the only way to run software on Quartz. For interactive or graphical applications consider the Research Desktop.",
     "kburl": "https://servicenow.iu.edu/kb?id=kb_article_view&sysparm_article=KB0023298",
     "openaction": [
         {
             "action": "objectbrowser",
             "hostname": "localhost",
-            "port": 8889
+            "port": 9102
         }
     ],
     "contextmenu": [
@@ -17,7 +17,7 @@
             "title": "Open Slurm Browser",
             "action": "objectbrowser",
             "hostname": "localhost",
-            "port": 8889
+            "port": 9102
         }
     ]
 }
