@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; margin: 12px; }
+      h1 { font-size: 20px; margin: 0 0 8px 0; }
+      .subtitle { color: #555; margin-bottom: 12px; }
+      .grid { display: grid; grid-template-columns: 180px 1fr; gap: 6px 12px; }
+      .key { color: #666; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      pre { background: #f6f8fa; padding: 8px; border-radius: 6px; }
+      .section { margin-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <h1>{{ obj.title or obj.id }}</h1>
+    {% if obj.description %}
+      <div class="subtitle">{{ obj.description }}</div>
+    {% endif %}
+
+      {% if obj.kburl %}
+        Learn more about Slurm jobs by reading the following knowledge base article: <a id="kb-link" href="{{ obj.kburl }}">{{ obj.kburl }}</a>
+      {% endif %}
+    </br></br>
+    Open this object to get a live view of jobs and partitions, including your own jobs.
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const kbLink = document.getElementById('kb-link');
+        if (kbLink) {
+          const originalUrl = kbLink.textContent;
+          if (originalUrl.length > 25) {
+            // Calculate how many characters to show from start and end
+            const maxLength = 25;
+            const ellipsis = '...';
+            const availableChars = maxLength - ellipsis.length; // 22 chars
+            const startChars = Math.ceil(availableChars / 2); // 11 chars
+            const endChars = Math.floor(availableChars / 2); // 11 chars
+            
+            const shortenedUrl = originalUrl.substring(0, startChars) + 
+                               ellipsis + 
+                               originalUrl.substring(originalUrl.length - endChars);
+            
+            kbLink.textContent = shortenedUrl;
+            kbLink.title = originalUrl; // Show full URL on hover
+          }
+        }
+      });
+    </script>
+
+  </body>
+  </html>
