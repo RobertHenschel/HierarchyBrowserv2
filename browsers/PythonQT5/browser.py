@@ -1228,7 +1228,7 @@ class MainWindow(QtWidgets.QMainWindow):
             
             if title_widget and isinstance(title_widget, QtWidgets.QLabel):
                 font = title_widget.font()
-                base_size = 9  # Assume base font size
+                base_size = 11  # Match details panel base font size
                 font.setPointSizeF(base_size * self._zoom_level)
                 title_widget.setFont(font)
             
