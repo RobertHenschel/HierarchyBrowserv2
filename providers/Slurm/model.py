@@ -79,6 +79,7 @@ class WPSlurmJob(ProviderObject):
     priority: Optional[int] = None
     remainingruntime: Optional[str] = None
     gres: Optional[str] = None
+    contextmenu: Optional[List[Dict]] = None
 
     @property
     def class_name(self) -> str:  # noqa: D401
