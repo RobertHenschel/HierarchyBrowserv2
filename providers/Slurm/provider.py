@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 import re
 import getpass
 from collections import Counter
+import json
 
 # Allow running this file directly: add project root to sys.path
 _THIS = Path(__file__).resolve()
@@ -207,12 +208,14 @@ class SlurmProvider(ObjectProvider):
                     cpus_str, mem_str, timelimit_str, account_str, elapsed_str,
                     state_reason_str, priority_str, gres_str, self.scramble_users
                 )
+                job_obj.contextmenu = [
+                    {"title": "Show Resource Usage", "action": "terminal", "command": "./show_job_usage.py " + jid + "; exit"}
+                ]
                 objects.append(job_obj.to_dict())
         except Exception as e:
             import traceback
             traceback.print_exc()   
             print(f"Error in get_my: {e}", flush=True)
-        
         return {"objects": objects}
 
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
