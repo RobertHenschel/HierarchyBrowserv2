@@ -86,15 +86,23 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
         self.job_user = None
         self.allocated_cpus = None
         self.allocated_memory_mb = None
+        self.allocated_gpus = None
+        self.gpu_memory_mb = None
+        self.multiple_gpu_job = False
         self.cpu_data = []
         self.memory_data = []
+        self.gpu_util_data = []
+        self.gpu_mem_data = []
         self.time_data = []
         self.max_points = 60  # Keep last 60 data points
+        self.has_nvidia_smi = False
+        self.gpu_count = 0
         self.update_timer = QtCore.QTimer()
         self.update_timer.timeout.connect(self.update_data)
         
         self.init_ui()
         self.get_job_info()
+        self.check_gpu_availability()
         
         # Start monitoring automatically after a short delay to allow UI to initialize
         QtCore.QTimer.singleShot(1000, self.auto_start_monitoring)
@@ -199,6 +207,21 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
                                 self.allocated_memory_mb = mem_value
                     except (ValueError, AttributeError):
                         self.allocated_memory_mb = None
+                elif 'gres' in line.lower() or 'tres=' in line.lower():
+                    # Extract GPU allocation from GRES or TRES
+                    try:
+                        import re
+                        # Look for patterns like "gres/gpu=2", "gres/gpu:v100=2", or "gpu:2"
+                        gpu_match = re.search(r'gres/gpu[^=]*=(\d+)|gpu:(\d+)', line, re.IGNORECASE)
+                        if gpu_match:
+                            # Get the matched number from either group
+                            gpu_count = gpu_match.group(1) if gpu_match.group(1) else gpu_match.group(2)
+                            self.allocated_gpus = int(gpu_count)
+                            # Check if this is a multiple GPU job
+                            if self.allocated_gpus > 1:
+                                self.multiple_gpu_job = True
+                    except (ValueError, AttributeError):
+                        self.allocated_gpus = None
                     
             if not node_name or node_name == '(null)' or node_name == 'None':
                 self.status_label.setText(f"Job {self.job_id} is not running on any node (State: {job_state})")
@@ -216,14 +239,57 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
                     alloc_info += f" | Memory: {self.allocated_memory_mb//1024}GB"
                 else:
                     alloc_info += f" | Memory: {self.allocated_memory_mb}MB"
+            if self.allocated_gpus:
+                alloc_info += f" | GPUs: {self.allocated_gpus}"
             
             self.info_label.setText(f"Monitoring Job: {self.job_id} on Node: {node_name}{alloc_info}")
-            self.status_label.setText(f"Job State: {job_state} | Node: {node_name}")
+            
+            # Check for multiple GPU jobs and show warning
+            if self.multiple_gpu_job:
+                self.status_label.setText(f"WARNING: Multiple GPU job detected ({self.allocated_gpus} GPUs) - Monitoring disabled")
+                QtWidgets.QMessageBox.warning(
+                    self, "Multiple GPU Job Detected", 
+                    f"This job has {self.allocated_gpus} GPUs allocated.\n\n"
+                    "GPU monitoring is not supported for multiple GPU jobs."
+                )
+            else:
+                self.status_label.setText(f"Job State: {job_state} | Node: {node_name}")
             
         except subprocess.TimeoutExpired:
             self.status_label.setText("Timeout getting job information")
         except Exception as e:
             self.status_label.setText(f"Error getting job info: {str(e)}")
+    
+    def check_gpu_availability(self):
+        """Check if nvidia-smi is available on the compute node."""
+        if not self.node_name:
+            return
+            
+        # Disable GPU monitoring for multiple GPU jobs
+        if self.multiple_gpu_job:
+            self.has_nvidia_smi = False
+            return
+            
+        try:
+            # Check if nvidia-smi is available on the remote node
+            ssh_cmd = [
+                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                self.node_name,
+                "nvidia-smi --query-gpu=count --format=csv,noheader,nounits"
+            ]
+            
+            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                try:
+                    self.gpu_count = int(result.stdout.strip())
+                    self.has_nvidia_smi = True
+                    print(f"GPU monitoring enabled: {self.gpu_count} GPU(s) detected")
+                except ValueError:
+                    pass
+            
+        except (subprocess.TimeoutExpired, Exception):
+            pass  # GPU monitoring will remain disabled
             
     def get_resource_usage(self) -> Optional[Dict[str, float]]:
         """Get CPU and memory usage for the job on the remote node using top command.
@@ -277,10 +343,64 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
         except Exception as e:
             self.status_label.setText(f"Error getting resource data: {str(e)}")
             return None
+    
+    def get_gpu_usage(self) -> Optional[Dict[str, float]]:
+        """Get GPU utilization and memory usage."""
+        if not self.has_nvidia_smi or not self.node_name:
+            return None
+            
+        try:
+            # Get GPU utilization and memory usage
+            ssh_cmd = [
+                "ssh", "-o", "ConnectTimeout=5", "-o", "StrictHostKeyChecking=no",
+                self.node_name,
+                "nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits"
+            ]
+            
+            result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                lines = result.stdout.strip().split('\n')
+                total_util = 0.0
+                total_mem_used = 0.0
+                total_mem_total = 0.0
+                
+                for line in lines:
+                    parts = line.split(',')
+                    if len(parts) >= 3:
+                        try:
+                            util = float(parts[0].strip())
+                            mem_used = float(parts[1].strip())
+                            mem_total = float(parts[2].strip())
+                            
+                            total_util += util
+                            total_mem_used += mem_used
+                            total_mem_total += mem_total
+                        except ValueError:
+                            continue
+                
+                if self.gpu_count > 0:
+                    avg_util = total_util / self.gpu_count
+                    mem_pct = (total_mem_used / total_mem_total * 100.0) if total_mem_total > 0 else 0.0
+                    
+                    # Store total GPU memory in MB for display (only once)
+                    if self.gpu_memory_mb is None and total_mem_total > 0:
+                        self.gpu_memory_mb = int(total_mem_total)
+                    
+                    return {
+                        "utilization": avg_util,
+                        "memory": mem_pct
+                    }
+            
+            return {"utilization": 0.0, "memory": 0.0}
+            
+        except (subprocess.TimeoutExpired, Exception):
+            return None
             
     def update_data(self):
-        """Update CPU and memory usage data."""
+        """Update CPU, memory, and GPU usage data."""
         resource_usage = self.get_resource_usage()
+        gpu_usage = self.get_gpu_usage() if self.has_nvidia_smi else None
         
         if resource_usage is not None:
             current_time = time.time()
@@ -290,10 +410,20 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
             self.memory_data.append(resource_usage["memory"])
             self.time_data.append(current_time)
             
+            # Add GPU data if available
+            if gpu_usage is not None:
+                self.gpu_util_data.append(gpu_usage["utilization"])
+                self.gpu_mem_data.append(gpu_usage["memory"])
+            else:
+                self.gpu_util_data.append(0.0)
+                self.gpu_mem_data.append(0.0)
+            
             # Keep only the last max_points
             if len(self.cpu_data) > self.max_points:
                 self.cpu_data.pop(0)
                 self.memory_data.pop(0)
+                self.gpu_util_data.pop(0)
+                self.gpu_mem_data.pop(0)
                 self.time_data.pop(0)
                 
             # Update plot
@@ -309,10 +439,18 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
             if self.allocated_memory_mb:
                 mem_text += f" of {self.allocated_memory_mb}MB allocated"
             
-            self.status_label.setText(f"{cpu_text} | {mem_text} | Node: {self.node_name}")
+            status_text = f"{cpu_text} | {mem_text}"
+            
+            # Add GPU info if available
+            if gpu_usage is not None:
+                gpu_text = f"GPU: {gpu_usage['utilization']:.1f}% util, {gpu_usage['memory']:.1f}% mem"
+                status_text += f" | {gpu_text}"
+            
+            status_text += f" | Node: {self.node_name}"
+            self.status_label.setText(status_text)
             
     def plot_data(self):
-        """Plot the CPU and memory usage data."""
+        """Plot the CPU, memory, and GPU usage data."""
         self.figure.clear()
         
         if self.cpu_data and self.time_data:
@@ -320,17 +458,28 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
             end_time = self.time_data[-1]
             relative_times = [(t - end_time) for t in self.time_data]
             
-            # Create two subplots
-            ax1 = self.figure.add_subplot(211)  # CPU plot
-            ax2 = self.figure.add_subplot(212)  # Memory plot
+            # Create subplots based on GPU availability
+            if self.has_nvidia_smi:
+                # 4 subplots: CPU, Memory, GPU Util, GPU Memory
+                ax1 = self.figure.add_subplot(221)  # CPU plot
+                ax2 = self.figure.add_subplot(222)  # Memory plot  
+                ax3 = self.figure.add_subplot(223)  # GPU Utilization plot
+                ax4 = self.figure.add_subplot(224)  # GPU Memory plot
+            else:
+                # 2 subplots: CPU, Memory
+                ax1 = self.figure.add_subplot(211)  # CPU plot
+                ax2 = self.figure.add_subplot(212)  # Memory plot
             
             # CPU plot
-            ax1.plot(relative_times, self.cpu_data, 'b-', linewidth=2, marker='o', markersize=3, label='CPU %')
+            ax1.plot(relative_times, self.cpu_data, 'b-', linewidth=2, marker='o', markersize=3, label='CPU Util %')
             ax1.fill_between(relative_times, self.cpu_data, alpha=0.3, color='blue')
             ax1.set_ylabel('CPU Usage (%)')
-            ax1.set_title(f'Job {self.job_id} Resource Usage (CPU: top %, Memory: % of allocation)')
+            if self.has_nvidia_smi:
+                ax1.set_title(f'Job {self.job_id} Resource Usage')
+            else:
+                ax1.set_title(f'Job {self.job_id} Resource Usage (CPU: top %, Memory: % of allocation)')
             ax1.grid(True, alpha=0.3)
-            ax1.legend()
+            ax1.legend(loc='upper right')
             
             # Set CPU y-axis limits based on allocated CPUs
             if self.allocated_cpus and self.allocated_cpus > 1:
@@ -338,22 +487,21 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
                 max_cpu_limit = self.allocated_cpus * 100
                 current_max = max(self.cpu_data) if self.cpu_data else 0
                 ax1.set_ylim(0, max(max_cpu_limit, current_max * 1.1))
-                ax1.axhline(y=max_cpu_limit, color='gray', linestyle='--', alpha=0.7, 
-                           label=f'Allocated: {self.allocated_cpus} CPUs ({max_cpu_limit}%)')
+                ax1.axhline(y=max_cpu_limit, color='gray', linestyle='--', alpha=0.7)
             else:
                 # Single core or unknown allocation
                 max_cpu = max(self.cpu_data) if self.cpu_data else 100
                 ax1.set_ylim(0, max(100, max_cpu * 1.1))
-                ax1.axhline(y=100, color='gray', linestyle='--', alpha=0.7, label='100% (1 CPU)')
+                ax1.axhline(y=100, color='gray', linestyle='--', alpha=0.7)
             
-            ax1.legend()
+            ax1.legend(loc='upper right')
             
             # Set x-axis to show last 60 seconds
             ax1.set_xlim(-60, 0)
             
             # Memory plot
             if self.memory_data:
-                ax2.plot(relative_times, self.memory_data, 'r-', linewidth=2, marker='s', markersize=3, label='Memory %')
+                ax2.plot(relative_times, self.memory_data, 'r-', linewidth=2, marker='s', markersize=3, label='CPU Mem %')
                 ax2.fill_between(relative_times, self.memory_data, alpha=0.3, color='red')
                 
                 # Set memory y-axis limits - memory % is now relative to allocated memory
@@ -361,22 +509,59 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
                 ax2.set_ylim(0, max(100, max_mem * 1.1))
                 
                 # Add 100% allocation line
-                ax2.axhline(y=100, color='gray', linestyle='--', alpha=0.7, 
-                           label=f'100% of allocated memory')
+                ax2.axhline(y=100, color='gray', linestyle='--', alpha=0.7)
                 
                 # Add allocation info
                 if self.allocated_memory_mb:
-                    ax2.text(0.02, 0.98, f'Allocated: {self.allocated_memory_mb}MB', 
+                    if self.allocated_memory_mb >= 1024:
+                        mem_text = f'Available: {self.allocated_memory_mb//1024}GB'
+                    else:
+                        mem_text = f'Available: {self.allocated_memory_mb}MB'
+                    ax2.text(0.02, 0.98, mem_text, 
                            transform=ax2.transAxes, verticalalignment='top',
                            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
             
             ax2.set_xlabel('Time (seconds)')
             ax2.set_ylabel('Memory Usage (%)')
             ax2.grid(True, alpha=0.3)
-            ax2.legend()
+            ax2.legend(loc='upper right')
             
             # Set x-axis to show last 60 seconds
             ax2.set_xlim(-60, 0)
+            
+            # GPU plots if available
+            if self.has_nvidia_smi and self.gpu_util_data:
+                # GPU Utilization plot
+                ax3.plot(relative_times, self.gpu_util_data, 'g-', linewidth=2, marker='^', markersize=3, label='GPU Util %')
+                ax3.fill_between(relative_times, self.gpu_util_data, alpha=0.3, color='green')
+                ax3.set_ylabel('GPU Util (%)')
+                ax3.set_xlabel('Time (seconds)')
+                ax3.grid(True, alpha=0.3)
+                ax3.legend(loc='upper right')
+                ax3.set_ylim(0, 105)
+                ax3.set_xlim(-60, 0)
+                ax3.axhline(y=100, color='gray', linestyle='--', alpha=0.7)
+                
+                # GPU Memory plot
+                ax4.plot(relative_times, self.gpu_mem_data, 'm-', linewidth=2, marker='d', markersize=3, label='GPU Mem %')
+                ax4.fill_between(relative_times, self.gpu_mem_data, alpha=0.3, color='magenta')
+                ax4.set_ylabel('GPU Memory (%)')
+                ax4.set_xlabel('Time (seconds)')
+                ax4.grid(True, alpha=0.3)
+                ax4.legend(loc='upper right')
+                ax4.set_ylim(0, 105)
+                ax4.set_xlim(-60, 0)
+                ax4.axhline(y=100, color='gray', linestyle='--', alpha=0.7)
+                
+                # Add GPU memory allocation info
+                if self.gpu_memory_mb:
+                    if self.gpu_memory_mb >= 1024:
+                        gpu_mem_text = f'Available: {self.gpu_memory_mb//1024}GB'
+                    else:
+                        gpu_mem_text = f'Available: {self.gpu_memory_mb}MB'
+                    ax4.text(0.02, 0.98, gpu_mem_text, 
+                           transform=ax4.transAxes, verticalalignment='top',
+                           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
             
         else:
             ax = self.figure.add_subplot(111)
@@ -399,8 +584,18 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
             )
             return
             
+        if self.multiple_gpu_job:
+            QtWidgets.QMessageBox.warning(
+                self, "Multiple GPU Job", 
+                f"Monitoring is disabled for multiple GPU jobs ({self.allocated_gpus} GPUs).\n\n"
+                "This limitation is in place to ensure accurate resource monitoring."
+            )
+            return
+            
         self.cpu_data.clear()
         self.memory_data.clear()
+        self.gpu_util_data.clear()
+        self.gpu_mem_data.clear()
         self.time_data.clear()
         self.update_timer.start(2000)  # Update every 2 seconds
         self.start_button.setEnabled(False)
@@ -422,10 +617,17 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
 
     def auto_start_monitoring(self):
         """Automatically start monitoring if the job is running."""
-        if self.node_name:
+        if self.multiple_gpu_job:
+            # Multiple GPU job - disable monitoring
+            self.start_button.setEnabled(False)
+            self.stop_button.setEnabled(False)
+            self.status_label.setText(f"Monitoring disabled - Multiple GPU job ({self.allocated_gpus} GPUs)")
+        elif self.node_name:
             # Job is running on a node, start monitoring
             self.cpu_data.clear()
             self.memory_data.clear()
+            self.gpu_util_data.clear()
+            self.gpu_mem_data.clear()
             self.time_data.clear()
             self.update_timer.start(2000)  # Update every 2 seconds
             self.start_button.setEnabled(False)
