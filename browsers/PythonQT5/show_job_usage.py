@@ -89,6 +89,7 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
         self.allocated_gpus = None
         self.gpu_memory_mb = None
         self.multiple_gpu_job = False
+        self.multiple_jobs_on_node = False
         self.cpu_data = []
         self.memory_data = []
         self.gpu_util_data = []
@@ -102,6 +103,7 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
         
         self.init_ui()
         self.get_job_info()
+        self.check_multiple_jobs_on_node()
         self.check_gpu_availability()
         
         # Start monitoring automatically after a short delay to allow UI to initialize
@@ -260,13 +262,43 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
         except Exception as e:
             self.status_label.setText(f"Error getting job info: {str(e)}")
     
+    def check_multiple_jobs_on_node(self):
+        """Check if the same user has multiple jobs running on the same node."""
+        if not self.node_name or not self.job_user:
+            return
+            
+        try:
+            # Get all running jobs for the user on the specific node
+            result = subprocess.run(
+                ["squeue", "-u", self.job_user, "-h", "-t", "RUNNING", "-w", self.node_name, "-o", "%i"],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                # Count job IDs (excluding our current job)
+                job_ids = [jid.strip() for jid in result.stdout.strip().split('\n') if jid.strip()]
+                other_jobs = [jid for jid in job_ids if jid != self.job_id]
+                
+                if len(other_jobs) > 0:
+                    self.multiple_jobs_on_node = True
+                    # Show warning dialog
+                    QtWidgets.QMessageBox.warning(
+                        self, "Multiple Jobs on Node Detected", 
+                        f"User '{self.job_user}' has {len(other_jobs) + 1} jobs running on node '{self.node_name}'.\n\n"
+                        "Job monitoring is not supported when multiple jobs from the same user "
+                        "are running on the same node to ensure accurate resource attribution."
+                    )
+                    
+        except (subprocess.TimeoutExpired, Exception):
+            pass  # If we can't check, assume it's okay to proceed
+    
     def check_gpu_availability(self):
         """Check if nvidia-smi is available on the compute node."""
         if not self.node_name:
             return
             
-        # Disable GPU monitoring for multiple GPU jobs
-        if self.multiple_gpu_job:
+        # Disable GPU monitoring for multiple GPU jobs or multiple jobs on node
+        if self.multiple_gpu_job or self.multiple_jobs_on_node:
             self.has_nvidia_smi = False
             return
             
@@ -592,6 +624,15 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
             )
             return
             
+        if self.multiple_jobs_on_node:
+            QtWidgets.QMessageBox.warning(
+                self, "Multiple Jobs on Node", 
+                f"Monitoring is disabled when multiple jobs from the same user "
+                f"are running on the same node ({self.node_name}).\n\n"
+                "This limitation ensures accurate resource attribution."
+            )
+            return
+            
         self.cpu_data.clear()
         self.memory_data.clear()
         self.gpu_util_data.clear()
@@ -622,6 +663,11 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(False)
             self.status_label.setText(f"Monitoring disabled - Multiple GPU job ({self.allocated_gpus} GPUs)")
+        elif self.multiple_jobs_on_node:
+            # Multiple jobs on node - disable monitoring
+            self.start_button.setEnabled(False)
+            self.stop_button.setEnabled(False)
+            self.status_label.setText(f"Monitoring disabled - Multiple jobs on node ({self.node_name})")
         elif self.node_name:
             # Job is running on a node, start monitoring
             self.cpu_data.clear()
