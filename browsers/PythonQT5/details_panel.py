@@ -77,7 +77,7 @@ class DetailsPanel(QtWidgets.QWidget):
             html = self.tpl_mgr.render(template_name, {"obj": obj, "json": json})
             
             # Inject CSS to scale font sizes based on zoom level
-            base_font_size = 9  # Match the Qt label base size
+            base_font_size = 11  # Slightly larger base size for better readability in web view
             scaled_html = self._inject_zoom_css(html, base_font_size, zoom_level)
             
             self.web.setHtml(scaled_html)

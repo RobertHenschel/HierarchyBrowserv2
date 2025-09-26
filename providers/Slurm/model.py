@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, List, Dict
 
 from providers.base import ProviderObject
 
@@ -16,6 +16,7 @@ class WPSlurmPartition(ProviderObject):
     runningjobs: Optional[str] = None
     pendingjobs: Optional[str] = None
     hasgpus: bool = False
+    contextmenu: Optional[List[Dict]] = None
 
     def _extra_fields(self) -> dict[str, object]:
         extra: dict[str, object] = {}
@@ -29,6 +30,8 @@ class WPSlurmPartition(ProviderObject):
         if self.pendingjobs is not None:
             extra["pendingjobs"] = self.pendingjobs
         extra["hasgpus"] = self.hasgpus
+        if self.contextmenu is not None:
+            extra["contextmenu"] = self.contextmenu
         return extra
 
     @property
@@ -53,6 +56,7 @@ class WPSlurmPartition(ProviderObject):
             runningjobs=(payload.get("runningjobs") if isinstance(payload.get("runningjobs"), str) else None),
             pendingjobs=(payload.get("pendingjobs") if isinstance(payload.get("pendingjobs"), str) else None),
             hasgpus=bool(payload.get("hasgpus", False)),
+            contextmenu=payload.get("contextmenu"),
         )
 
 
@@ -75,6 +79,7 @@ class WPSlurmJob(ProviderObject):
     priority: Optional[int] = None
     remainingruntime: Optional[str] = None
     gres: Optional[str] = None
+    contextmenu: Optional[List[Dict]] = None
 
     @property
     def class_name(self) -> str:  # noqa: D401
@@ -109,6 +114,8 @@ class WPSlurmJob(ProviderObject):
             extra["remainingruntime"] = self.remainingruntime
         if self.gres is not None:
             extra["gres"] = self.gres
+        if self.contextmenu is not None:
+            extra["contextmenu"] = self.contextmenu
         return extra
 
 

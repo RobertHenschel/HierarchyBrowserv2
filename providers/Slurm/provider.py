@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 import re
 import getpass
 from collections import Counter
+import json
 
 # Allow running this file directly: add project root to sys.path
 _THIS = Path(__file__).resolve()
@@ -157,7 +158,7 @@ class SlurmProvider(ObjectProvider):
             objects.append(obj.to_dict())
         
         obj = WPGroup(
-            id=f"/<Show:userid:{MY_USER_ID}>",
+            id=f"/<ShowMy:{MY_USER_ID}>",
             title="My Jobs",
             icon=group_name,
             objects=int(_get_my_jobs_count()),
@@ -165,9 +166,63 @@ class SlurmProvider(ObjectProvider):
         objects.append(obj.to_dict())
         return {"objects": objects}
 
+    def get_my(self) -> Dict[str, List[Dict]]:
+        """Return only jobs for the current user using squeue --me."""
+        objects: List[Dict[str, object]] = []
+        try:
+            # Use squeue --me to get only current user's jobs
+            fmt = "%i|%u|%D|%T|%P|%j|%C|%m|%l|%a|%M|%r|%Q|%b"
+            out = subprocess.check_output(["squeue", "-h", "--me", "-o", fmt], text=True)
+            
+            for line in out.splitlines():
+                entry = line.strip()
+                if not entry:
+                    continue
+                # Split into expected parts per fmt
+                parts = entry.split("|", 13)
+                if len(parts) != 14:
+                    continue
+                jid = parts[0].strip()
+                user = parts[1].strip()
+                try:
+                    nodes = int(parts[2].strip())
+                except Exception:
+                    nodes = 0
+                state_raw = parts[3].strip()
+                partition_name = parts[4].strip()
+                jobname = parts[5].strip()
+                cpus_str = parts[6].strip()
+                mem_str = parts[7].strip()
+                timelimit_str = parts[8].strip()
+                account_str = parts[9].strip()
+                elapsed_str = parts[10].strip()
+                state_reason_str = parts[11].strip()
+                priority_str = parts[12].strip()
+                gres_str = parts[13].strip()
+                
+                if not jid:
+                    continue
+                    
+                job_obj = _create_slurm_job_object(
+                    jid, user, nodes, state_raw, partition_name, jobname,
+                    cpus_str, mem_str, timelimit_str, account_str, elapsed_str,
+                    state_reason_str, priority_str, gres_str, self.scramble_users
+                )
+                job_obj.contextmenu = [
+                    {"title": "Show Resource Usage", "action": "terminal", "command": "./show_job_usage.py " + jid + "; exit"}
+                ]
+                objects.append(job_obj.to_dict())
+        except Exception as e:
+            import traceback
+            traceback.print_exc()   
+            print(f"Error in get_my: {e}", flush=True)
+        return {"objects": objects}
+
     def get_objects_for_path(self, path_str: str) -> Dict[str, List[Dict]]:
         if path_str.strip() == "/" or path_str.strip() == "":
             return self.get_root_objects_payload()
+        if path_str.startswith("/<ShowMy:"):
+            return self.get_my()
 
 
         def list_for_base(base: str) -> List[ProviderObject]:
@@ -196,6 +251,86 @@ class SlurmProvider(ObjectProvider):
             group_icon_filename=f"./resources/Group.png",
         )
 
+def _create_slurm_job_object(
+    jid: str, user: str, nodes: int, state_raw: str, partition_name: str, 
+    jobname: str, cpus_str: str, mem_str: str, timelimit_str: str, 
+    account_str: str, elapsed_str: str, state_reason_str: str, 
+    priority_str: str, gres_str: str, scramble_users: bool = False
+) -> WPSlurmJob:
+    """Create a WPSlurmJob object from squeue output fields."""
+    if scramble_users:
+        user = _rot13(user)
+        my_user_id = _rot13(MY_USER_ID)
+    else:
+        my_user_id = MY_USER_ID
+    
+    # Normalize state to human readable: capitalize only first letter, lower rest
+    state = state_raw.capitalize()
+    
+    job_id = f"/{partition_name}/{jid}"
+    if job_id.startswith("//"):
+        job_id = job_id[1:]
+    
+    # Compute remaining runtime from timelimit - elapsed
+    remaining = None
+    try:
+        def _to_seconds(s: str) -> int:
+            if not s:
+                return 0
+            if "-" in s:
+                days_part, time_part = s.split("-", 1)
+                days = int(days_part)
+            else:
+                days = 0
+                time_part = s
+            bits = time_part.split(":")
+            bits = [int(x) if x.isdigit() else 0 for x in bits]
+            while len(bits) < 3:
+                bits.insert(0, 0)
+            hh, mm, ss = bits[-3], bits[-2], bits[-1]
+            return days * 86400 + hh * 3600 + mm * 60 + ss
+        tl = _to_seconds(timelimit_str)
+        el = _to_seconds(elapsed_str)
+        rem = max(0, tl - el)
+        d, rem2 = divmod(rem, 86400)
+        h, rem3 = divmod(rem2, 3600)
+        m, s = divmod(rem3, 60)
+        if d > 0:
+            remaining = f"{d}-{h:02d}:{m:02d}:{s:02d}"
+        else:
+            remaining = f"{h:02d}:{m:02d}:{s:02d}"
+    except Exception:
+        remaining = None
+    
+    # Choose icon based on ownership
+    if user == my_user_id:
+        icon_name = f"./resources/{MY_JOB_ICON_PATH.name}"
+    else:
+        icon_name = f"./resources/{JOB_ICON_PATH.name}"
+    
+    return WPSlurmJob(
+        id=job_id,
+        title=jid,
+        icon=icon_name,
+        objects=0,
+        jobarray=("_" in jid),
+        userid=user,
+        nodecount=int(nodes),
+        jobstate=state,
+        partition=partition_name,
+        jobname=jobname,
+        cpus=(int(cpus_str) if cpus_str.isdigit() else 0),
+        totalmemory=mem_str if mem_str else None,
+        requestedruntime=timelimit_str if timelimit_str else None,
+        account=account_str if account_str else None,
+        elapsedruntime=elapsed_str if elapsed_str else None,
+        state_reason=state_reason_str if state_reason_str else None,
+        priority=(int(priority_str) if priority_str.isdigit() else None),
+        remainingruntime=remaining,
+        gres=gres_str if gres_str else None,
+    )
+
+
 def _get_jobs_for_partition(partition: str, scramble_users: bool = False) -> List[ProviderObject]:
     """Return typed WPSlurmJob objects for jobs in the given partition.
 
@@ -223,8 +358,6 @@ def _get_jobs_for_partition(partition: str, scramble_users: bool = False) -> Lis
                 continue
             jid = parts[0].strip()
             user = parts[1].strip()
-            if scramble_users:
-                user = _rot13(user)
             try:
                 nodes = int(parts[2].strip())
             except Exception:
@@ -240,74 +373,16 @@ def _get_jobs_for_partition(partition: str, scramble_users: bool = False) -> Lis
             state_reason_str = parts[11].strip()
             priority_str = parts[12].strip()
             gres_str = parts[13].strip()
-            # Normalize to human readable: capitalize only first letter, lower rest
-            state = state_raw.capitalize()
+            
             if not jid:
                 continue
-            job_id = f"/{partition_name}/{jid}"
-            if job_id.startswith("//"):
-                job_id = job_id[1:]
-            # Compute remaining runtime from timelimit - elapsed
-            remaining = None
-            try:
-                def _to_seconds(s: str) -> int:
-                    if not s:
-                        return 0
-                    if "-" in s:
-                        days_part, time_part = s.split("-", 1)
-                        days = int(days_part)
-                    else:
-                        days = 0
-                        time_part = s
-                    bits = time_part.split(":")
-                    bits = [int(x) if x.isdigit() else 0 for x in bits]
-                    while len(bits) < 3:
-                        bits.insert(0, 0)
-                    hh, mm, ss = bits[-3], bits[-2], bits[-1]
-                    return days * 86400 + hh * 3600 + mm * 60 + ss
-                tl = _to_seconds(timelimit_str)
-                el = _to_seconds(elapsed_str)
-                rem = max(0, tl - el)
-                d, rem2 = divmod(rem, 86400)
-                h, rem3 = divmod(rem2, 3600)
-                m, s = divmod(rem3, 60)
-                if d > 0:
-                    remaining = f"{d}-{h:02d}:{m:02d}:{s:02d}"
-                else:
-                    remaining = f"{h:02d}:{m:02d}:{s:02d}"
-            except Exception:
-                remaining = None
-            if scramble_users:
-                my_user_id = _rot13(MY_USER_ID)
-            else:
-                my_user_id = MY_USER_ID
-            if user == my_user_id:
-                icon_name = f"./resources/{MY_JOB_ICON_PATH.name}"
-            else:
-                icon_name = f"./resources/{JOB_ICON_PATH.name}"
-            typed.append(
-                WPSlurmJob(
-                    id=job_id,
-                    title=jid,
-                    icon=icon_name,
-                    objects=0,
-                    jobarray=("_" in jid),
-                    userid=user,
-                    nodecount=int(nodes),
-                    jobstate=state,
-                    partition=partition_name,
-                    jobname=jobname,
-                    cpus=(int(cpus_str) if cpus_str.isdigit() else 0),
-                    totalmemory=mem_str if mem_str else None,
-                    requestedruntime=timelimit_str if timelimit_str else None,
-                    account=account_str if account_str else None,
-                    elapsedruntime=elapsed_str if elapsed_str else None,
-                    state_reason=state_reason_str if state_reason_str else None,
-                    priority=(int(priority_str) if priority_str.isdigit() else None),
-                    remainingruntime=remaining,
-                    gres=gres_str if gres_str else None,
-                )
+                
+            job_obj = _create_slurm_job_object(
+                jid, user, nodes, state_raw, partition_name, jobname,
+                cpus_str, mem_str, timelimit_str, account_str, elapsed_str,
+                state_reason_str, priority_str, gres_str, scramble_users
             )
+            typed.append(job_obj)
         return typed
     except Exception as e:
         import traceback

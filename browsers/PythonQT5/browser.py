@@ -164,7 +164,7 @@ def pixmap_from_base64(b64_png: str, size: int = 96) -> QtGui.QPixmap:
         return QtGui.QPixmap()
 
 
-def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
+def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int, zoom_level: float = 1.0) -> QtGui.QPixmap:
     if count <= 0 or pixmap.isNull():
         return pixmap
 
@@ -173,15 +173,17 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     painter = QtGui.QPainter(composed)
     painter.setRenderHint(QtGui.QPainter.Antialiasing)
 
-    # Base dimensions for the badge
+    # Base dimensions for the badge (scaled by zoom level)
     base_height = max(18, int(min(composed.width(), composed.height()) * 0.28))
-    margin = 2  # small margin from edge
+    base_height = int(base_height * zoom_level)
+    margin = max(2, int(2 * zoom_level))  # small margin from edge, scaled
 
     # Configure text styling
     painter.setPen(QtGui.QPen(QtCore.Qt.black))
     font = painter.font()
     font.setBold(True)
-    font.setPointSizeF(max(8.0, base_height * 0.60))
+    base_font_size = max(8.0, base_height * 0.60)
+    font.setPointSizeF(base_font_size * zoom_level)
     painter.setFont(font)
 
     text = str(count)
@@ -189,9 +191,9 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int) -> QtGui.QPixmap:
     text_width = fm.horizontalAdvance(text)
     text_height = fm.height()
 
-    # Create a rounded rectangle that hugs the text more closely
-    horizontal_padding = max(4, int(text_width * 0.25))  # 25% padding on each side
-    vertical_padding = max(2, int(text_height * 0.15))   # 15% padding top/bottom
+    # Create a rounded rectangle that hugs the text more closely (scaled by zoom)
+    horizontal_padding = max(int(4 * zoom_level), int(text_width * 0.25))  # 25% padding on each side
+    vertical_padding = max(int(2 * zoom_level), int(text_height * 0.15))   # 15% padding top/bottom
     
     badge_width = text_width + 2 * horizontal_padding
     badge_height = max(base_height, text_height + 2 * vertical_padding)
@@ -286,7 +288,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
         # Fallback for legacy providers that still send base64 bitstreams
         if pix.isNull() and isinstance(icon_spec, str) and len(icon_spec) > 64:
             pix = pixmap_from_base64(icon_spec, size=ICON_IMAGE_PX)
-        pix = add_badge_to_pixmap(pix, objects_count)
+        pix = add_badge_to_pixmap(pix, objects_count, zoom_level)
         if not pix.isNull():
             icon_label.setPixmap(pix)
 
@@ -1226,7 +1228,7 @@ class MainWindow(QtWidgets.QMainWindow):
             
             if title_widget and isinstance(title_widget, QtWidgets.QLabel):
                 font = title_widget.font()
-                base_size = 9  # Assume base font size
+                base_size = 11  # Match details panel base font size
                 font.setPointSizeF(base_size * self._zoom_level)
                 title_widget.setFont(font)
             
