@@ -2591,7 +2591,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jupyterlab/services@npm:^7.4.9":
+"@jupyterlab/services@npm:^7.0.0, @jupyterlab/services@npm:^7.4.9":
   version: 7.4.9
   resolution: "@jupyterlab/services@npm:7.4.9"
   dependencies:
@@ -6760,6 +6760,7 @@ __metadata:
     "@jupyterlab/application": ^4.0.0
     "@jupyterlab/builder": ^4.0.0
     "@jupyterlab/launcher": ^4.0.0
+    "@jupyterlab/services": ^7.0.0
     "@jupyterlab/testutils": ^4.0.0
     "@lumino/widgets": ^2.0.0
     "@types/jest": ^29.2.0
