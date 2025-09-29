@@ -6,3 +6,5 @@ providers/Modules/__pycache__/*
 providers/ResearchComputingAtIU/__pycache__/*
 .DS_Store
 providers/Accounts/__pycache__/*
+media/t/*
+
