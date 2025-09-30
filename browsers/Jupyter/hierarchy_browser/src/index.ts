@@ -44,6 +44,7 @@ namespace Constants {
   export const EXTENSION_ID = 'hierarchy-browser:plugin';
   export const WIDGET_CLASS = 'jp-HierarchyBrowser';
   export const API_ENDPOINT = 'hierarchy-browser/api';
+  export const ICON_CLASS = 'jp-HierarchyBrowser-icon';
 }
 
 /**
@@ -107,7 +108,7 @@ class HierarchyBrowserWidget extends Widget {
     this.id = `hierarchy-browser-${++HierarchyBrowserWidget.nextId}`;
     this.title.label = 'Hierarchy Browser';
     this.title.closable = true;
-    this.title.iconClass = 'jp-MaterialIcon jp-TreeViewIcon';
+    this.title.iconClass = Constants.ICON_CLASS;
     this.addClass(Constants.WIDGET_CLASS);
 
     this.api = new HierarchyBrowserAPI();
@@ -284,6 +285,7 @@ function registerCommands(app: JupyterFrontEnd): void {
   commands.addCommand(CommandIDs.open, {
     label: 'Hierarchy Browser',
     caption: 'Open the Hierarchy Browser',
+    iconClass: Constants.ICON_CLASS,
     execute: (): void => {
       const widget = new HierarchyBrowserWidget();
       app.shell.add(widget, 'main');
