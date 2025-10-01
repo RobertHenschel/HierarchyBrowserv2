@@ -182,7 +182,7 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int, zoom_level: float = 1
     painter.setPen(QtGui.QPen(QtCore.Qt.black))
     font = painter.font()
     font.setBold(True)
-    base_font_size = max(8.0, base_height * 0.60)
+    base_font_size = max(8.0, base_height * 0.40)
     font.setPointSizeF(base_font_size * zoom_level)
     painter.setFont(font)
 
@@ -192,15 +192,15 @@ def add_badge_to_pixmap(pixmap: QtGui.QPixmap, count: int, zoom_level: float = 1
     text_height = fm.height()
 
     # Create a rounded rectangle that hugs the text more closely (scaled by zoom)
-    horizontal_padding = max(int(4 * zoom_level), int(text_width * 0.25))  # 25% padding on each side
-    vertical_padding = max(int(2 * zoom_level), int(text_height * 0.15))   # 15% padding top/bottom
+    horizontal_padding = max(int(2 * zoom_level), int(text_width * 0.15))  # Reduced padding on each side
+    vertical_padding = max(int(1 * zoom_level), int(text_height * 0.1))    # Reduced padding top/bottom
     
     badge_width = text_width + 2 * horizontal_padding
     badge_height = max(base_height, text_height + 2 * vertical_padding)
     
-    # Position badge in bottom-right corner
-    x = composed.width() - badge_width - margin
-    y = composed.height() - badge_height - margin
+    # Position badge in bottom-right corner (all the way in corner)
+    x = composed.width() - badge_width
+    y = composed.height() - badge_height
 
     # Draw rounded rectangle background
     badge_color = QtGui.QColor("#cfe8ff")  # light pastel blue
