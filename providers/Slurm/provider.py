@@ -155,6 +155,9 @@ class SlurmProvider(ObjectProvider):
                 pendingjobs=pending_jobs,
                 hasgpus=has_gpus
             )
+            obj.contextmenu = [
+                    {"title": "Submit Interactive Job", "action": "terminal", "command": "./submit_interactive_job.py " + part + "; exit"}
+                ]
             objects.append(obj.to_dict())
         
         obj = WPGroup(
