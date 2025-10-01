@@ -17,6 +17,9 @@ class PartitionInfo:
         self.max_mem_mb = None
         self.max_time_minutes = None
         self.default_time_minutes = 60
+        self.max_gpus = None
+        self.gpu_type = None
+        self.has_gpus = False
         
 
 class InteractiveJobDialog(QtWidgets.QDialog):
@@ -88,6 +91,18 @@ class InteractiveJobDialog(QtWidgets.QDialog):
         memory_layout.addStretch()
         form_layout.addRow("Memory:", memory_layout)
         
+        # GPUs (will be hidden if partition has no GPUs)
+        self.gpus_spinbox = QtWidgets.QSpinBox()
+        self.gpus_spinbox.setMinimum(0)
+        self.gpus_spinbox.setMaximum(8)  # Will be updated with partition max
+        self.gpus_spinbox.setValue(0)
+        self.gpus_spinbox.setToolTip("Number of GPUs (0 for no GPU)")
+        self.gpu_row_label = QtWidgets.QLabel("GPUs:")
+        form_layout.addRow(self.gpu_row_label, self.gpus_spinbox)
+        # Initially hide GPU controls until we know if partition has GPUs
+        self.gpu_row_label.setVisible(False)
+        self.gpus_spinbox.setVisible(False)
+        
         # Time limit
         time_layout = QtWidgets.QHBoxLayout()
         self.time_hours_spinbox = QtWidgets.QSpinBox()
@@ -132,6 +147,7 @@ class InteractiveJobDialog(QtWidgets.QDialog):
         self.account_combo.currentTextChanged.connect(self.update_command_preview)
         self.cpus_spinbox.valueChanged.connect(self.update_command_preview)
         self.memory_spinbox.valueChanged.connect(self.update_command_preview)
+        self.gpus_spinbox.valueChanged.connect(self.update_command_preview)
         self.time_hours_spinbox.valueChanged.connect(self.update_command_preview)
         self.time_minutes_spinbox.valueChanged.connect(self.update_command_preview)
         
@@ -178,7 +194,6 @@ class InteractiveJobDialog(QtWidgets.QDialog):
                 
             # Parse partition info
             output = result.stdout
-            print(f"[DEBUG] Partition output:\n{output}\n")
             
             import re
             
@@ -187,7 +202,6 @@ class InteractiveJobDialog(QtWidgets.QDialog):
             nodes_match = re.search(r'\bNodes=(\S+)', output)
             if nodes_match:
                 node_name = nodes_match.group(1)
-                print(f"[DEBUG] Found Nodes field: {node_name}")
                 
                 # If node is a range or list, just take the first one
                 if '[' in node_name:
@@ -199,41 +213,36 @@ class InteractiveJobDialog(QtWidgets.QDialog):
                         node_name = base + first_num
                     else:
                         node_name = base + range_part.split(',')[0]
-                    print(f"[DEBUG] Extracted first node from range: {node_name}")
                 elif ',' in node_name:
                     node_name = node_name.split(',')[0]
-                    print(f"[DEBUG] Extracted first node from list: {node_name}")
-                else:
-                    print(f"[DEBUG] Using single node: {node_name}")
                 
                 # Get node info
-                print(f"[DEBUG] Querying node with: scontrol show node {node_name}")
                 node_result = subprocess.run(
                     ["scontrol", "show", "node", node_name],
                     capture_output=True, text=True, timeout=10
                 )
-                print(f"[DEBUG] Node query return code: {node_result.returncode}")
                 if node_result.returncode == 0:
-                    print(f"[DEBUG] Node output:\n{node_result.stdout}\n")
-                    
                     cpus_match = re.search(r'CPUTot=(\d+)', node_result.stdout)
                     if cpus_match:
                         self.partition_info.max_cpus = int(cpus_match.group(1))
-                        print(f"[DEBUG] Found CPUTot: {self.partition_info.max_cpus}")
-                    else:
-                        print("[DEBUG] CPUTot not found in node output")
                     
                     # Get memory info
                     mem_match = re.search(r'RealMemory=(\d+)', node_result.stdout)
                     if mem_match:
                         self.partition_info.max_mem_mb = int(mem_match.group(1))
-                        print(f"[DEBUG] Found RealMemory: {self.partition_info.max_mem_mb} MB")
+                    
+                    # Get GPU info from Gres field (e.g., Gres=gpu:v100:4)
+                    gres_match = re.search(r'Gres=gpu:(\w+):(\d+)', node_result.stdout)
+                    if gres_match:
+                        self.partition_info.has_gpus = True
+                        self.partition_info.gpu_type = gres_match.group(1)
+                        self.partition_info.max_gpus = int(gres_match.group(2))
                     else:
-                        print("[DEBUG] RealMemory not found in node output")
-                else:
-                    print(f"[DEBUG] Failed to get node info. stderr: {node_result.stderr}")
-            else:
-                print("[DEBUG] Nodes field not found in partition output")
+                        # Try simpler pattern (e.g., Gres=gpu:4)
+                        gres_simple_match = re.search(r'Gres=gpu:(\d+)', node_result.stdout)
+                        if gres_simple_match:
+                            self.partition_info.has_gpus = True
+                            self.partition_info.max_gpus = int(gres_simple_match.group(1))
             
             # Look for MaxTime or DefaultTime
             max_time_match = re.search(r'MaxTime=(\S+)', output)
@@ -308,6 +317,12 @@ class InteractiveJobDialog(QtWidgets.QDialog):
             constraints.append(f"Max Memory: {mem_gb}GB")
         else:
             constraints.append("Max Memory: Unknown")
+        
+        if self.partition_info.has_gpus:
+            if self.partition_info.gpu_type:
+                constraints.append(f"Max GPUs: {self.partition_info.max_gpus} ({self.partition_info.gpu_type})")
+            else:
+                constraints.append(f"Max GPUs: {self.partition_info.max_gpus}")
             
         if self.partition_info.max_time_minutes:
             hours = self.partition_info.max_time_minutes // 60
@@ -329,6 +344,19 @@ class InteractiveJobDialog(QtWidgets.QDialog):
             self.memory_spinbox.setMaximum(max_mem_gb)
         else:
             self.memory_spinbox.setMaximum(9999)
+        
+        # Show/hide GPU controls based on availability
+        if self.partition_info.has_gpus:
+            self.gpu_row_label.setVisible(True)
+            self.gpus_spinbox.setVisible(True)
+            if self.partition_info.max_gpus:
+                self.gpus_spinbox.setMaximum(self.partition_info.max_gpus)
+            # Update tooltip with GPU type if available
+            if self.partition_info.gpu_type:
+                self.gpus_spinbox.setToolTip(f"Number of {self.partition_info.gpu_type} GPUs (0 for no GPU)")
+        else:
+            self.gpu_row_label.setVisible(False)
+            self.gpus_spinbox.setVisible(False)
             
         if self.partition_info.max_time_minutes:
             max_hours = self.partition_info.max_time_minutes // 60
@@ -400,6 +428,11 @@ class InteractiveJobDialog(QtWidgets.QDialog):
             f"--cpus-per-task={self.cpus_spinbox.value()}",
             f"--mem={memory_mb}M",
         ]
+        
+        # Add GPU request if GPUs are available and requested
+        if self.partition_info.has_gpus and self.gpus_spinbox.value() > 0:
+            gpu_count = self.gpus_spinbox.value()
+            cmd.append(f"--gres=gpu:{gpu_count}")
         
         # Add time limit
         hours = self.time_hours_spinbox.value()
