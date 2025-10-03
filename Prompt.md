@@ -1,3 +1,15 @@
+2025-10-02 - Add Show Job Usage Part
+If you need to execute anything, always source ~/my/venv/bin/activate.
+Look at the steps below and ask questions if you don't think you have enough information to implement this. Wait until you have all the info you need and then implement.
+Goal: Integrate "Show Job Usage" in the same way as "Submit Interactive Job" was integrated.
+Steps:
+1. Move "show_job_usage.py" from the browser into the Parts directory of the Slurm provider.
+1.1. Create a json file called show_job_usage.json that describes the part with the following info:
+1.2. UniqueID "Slurm/ShowSingleNodeJobUsage", ContextMenuEntryName "Show Job Usage", PythonScript "show_job_usage.py", ObjectClassList "WPSlurmJob"
+2. Make sure that show_job_usage.py can be invoked from the browser in the same way as "submit_interactive_job.py" is invoked. So fix the command line parameters and whatever is needed so it can be run in the way that the browser expects it to run.
+
+=============================================================
+=============================================================
 2025-10-02 - Adding OpenDoc Parts
 If you need to execute anything, always source ~/my/venv/bin/activate.
 Look at the steps below and ask questions if you don't think you have enough information to implement this. Wait until you have all the info you need and then implement.
@@ -18,6 +30,7 @@ Steps:
 4.2. If the unique ID fits, return the python script of that provider.
 5. In the PythonQT5 browser, enable the Parts by:
 5.1. After the GetInfo call, also call GetParts for the provider.
+5.1.1. Make sure that GetParts is not only called on first connecting to a provider, but also when switching from one provider to another.
 5.2. If parts are available, request them all. Put the python scripts into a directory with the name of the provider below the "Parts" directory. The Parts directory is at the same level where Resources is right now.
 5.3. Then for each Part, make an inventory for future use that notes down the ObjectClass that this Part applies to.
 6. Extend the context menu creation for each object in the PythonQT5 browser.

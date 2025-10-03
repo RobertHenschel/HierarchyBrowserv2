@@ -688,13 +688,23 @@ class JobUsageMonitor(QtWidgets.QMainWindow):
 
 def main():
     parser = argparse.ArgumentParser(description="Monitor Slurm job resource usage")
-    parser.add_argument("job_id", help="Slurm job ID to monitor")
+    parser.add_argument(
+        "object_title",
+        help="Title of the job object (job ID)"
+    )
+    parser.add_argument(
+        "object_id",
+        help="ID of the job object"
+    )
     args = parser.parse_args()
     
+    # Extract job ID from object_title (the title is the job ID)
+    job_id = args.object_title
+    
     # Check if another instance is already running for this job
-    lock_manager = JobLockManager(args.job_id)
+    lock_manager = JobLockManager(job_id)
     if not lock_manager.acquire_lock():
-        print(f"Error: Another instance of Job Usage Monitor is already running for job {args.job_id}")
+        print(f"Error: Another instance of Job Usage Monitor is already running for job {job_id}")
         print(f"Lock file: {lock_manager.lock_file}")
         sys.exit(1)
     
@@ -707,7 +717,7 @@ def main():
     except:
         pass
     
-    monitor = JobUsageMonitor(args.job_id)
+    monitor = JobUsageMonitor(job_id)
     monitor.show()
     
     sys.exit(app.exec_())

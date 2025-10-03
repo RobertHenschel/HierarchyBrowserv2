@@ -1,0 +1,7 @@
+{
+  "UniqueID": "Slurm/ShowSingleNodeJobUsage",
+  "ContextMenuEntryName": "Show Job Usage",
+  "PythonScript": "show_job_usage.py",
+  "ObjectClassList": ["WPSlurmJob"]
+}
+

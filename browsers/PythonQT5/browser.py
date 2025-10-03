@@ -680,6 +680,10 @@ class MainWindow(QtWidgets.QMainWindow):
                         info = fetch_info(new_host, new_port)
                         root_name = info.get("RootName") if isinstance(info, dict) else None
                         self.add_icons_from_info(info)
+                        # Update provider name and load parts from new provider
+                        if isinstance(root_name, str) and root_name:
+                            self.provider_name = root_name
+                        self.load_parts_from_provider()
                     except Exception:
                         pass
                     # First provider in path: replace root; subsequent: append a crumb for the new provider root
@@ -1072,6 +1076,11 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 info = fetch_info(self.current_host, self.current_port)
                 self.add_icons_from_info(info)
+                # Update provider name and load parts from new provider
+                root_name = info.get("RootName") if isinstance(info, dict) else None
+                if isinstance(root_name, str) and root_name:
+                    self.provider_name = root_name
+                self.load_parts_from_provider()
             except Exception:
                 pass
         self.load_children(remote_id, next_host, next_port)
@@ -1561,6 +1570,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 try:
                     info = fetch_info(self.current_host, self.current_port)
                     self.add_icons_from_info(info)
+                    # Update provider name and load parts from new provider
+                    root_name = info.get("RootName") if isinstance(info, dict) else None
+                    if isinstance(root_name, str) and root_name:
+                        self.provider_name = root_name
+                    self.load_parts_from_provider()
                 except Exception:
                     pass
             self.load_children(remote_id, next_host, next_port)
