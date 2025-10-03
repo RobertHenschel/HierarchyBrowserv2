@@ -120,6 +120,48 @@ def fetch_info(host: Optional[str] = None, port: Optional[int] = None) -> Dict[s
     return json.loads(buf.decode("utf-8").strip())
 
 
+def fetch_parts(host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
+    h = host or PROVIDER_HOST
+    p = port or PROVIDER_PORT
+    payload = {"method": "GetParts"}
+    message = json.dumps(payload, separators=(",", ":")) + "\n"
+    try:
+        with socket.create_connection((h, p), timeout=10) as s:
+            s.sendall(message.encode("utf-8"))
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+        if not buf:
+            return {}
+        return json.loads(buf.decode("utf-8").strip())
+    except Exception:
+        return {}
+
+
+def fetch_part(part_id: str, host: Optional[str] = None, port: Optional[int] = None) -> Dict[str, Any]:
+    h = host or PROVIDER_HOST
+    p = port or PROVIDER_PORT
+    payload = {"method": "GetPart", "id": part_id}
+    message = json.dumps(payload, separators=(",", ":")) + "\n"
+    try:
+        with socket.create_connection((h, p), timeout=10) as s:
+            s.sendall(message.encode("utf-8"))
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(16384)
+                if not chunk:
+                    break
+                buf += chunk
+        if not buf:
+            return {}
+        return json.loads(buf.decode("utf-8").strip())
+    except Exception:
+        return {}
+
+
 def _trim_transparent_margins(image: QtGui.QImage) -> QtGui.QImage:
     # Convert to ARGB to reliably inspect alpha channel
     if image.format() != QtGui.QImage.Format_ARGB32:
@@ -232,6 +274,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
         parent: QtWidgets.QWidget | None = None,
         icon_lookup: Optional[Callable[[str], QtGui.QPixmap]] = None,
         zoom_level: float = 1.0,
+        parts_registry: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("objectItemWidget")
@@ -239,6 +282,7 @@ class ObjectItemWidget(QtWidgets.QWidget):
         self._obj = obj
         self._icon_lookup = icon_lookup
         self._click_timer: Optional[QtCore.QTimer] = None
+        self._parts_registry = parts_registry if parts_registry is not None else {}
         # Ensure stylesheet backgrounds/borders are painted on QWidget
         self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
         layout = QtWidgets.QVBoxLayout(self)
@@ -356,24 +400,77 @@ class ObjectItemWidget(QtWidgets.QWidget):
     def contextMenuEvent(self, event: QtGui.QContextMenuEvent) -> None:  # type: ignore[override]
         # Ensure right-click also selects the item and updates details panel
         self.clicked.emit(self._obj)
-        menu_spec = self._obj.get("contextmenu")
-        if not isinstance(menu_spec, list) or len(menu_spec) == 0:
-            return
+        
+        # Build menu from both object's contextmenu and parts registry
         # Use a parentless menu so it doesn't inherit the tile's stylesheet
         menu = QtWidgets.QMenu()
         menu.setStyleSheet("")
-        for entry in menu_spec:
-            if not isinstance(entry, dict):
-                continue
-            title = entry.get("title")
-            if not isinstance(title, str) or not title:
-                continue
-            action = menu.addAction(title)
-            # Capture entry and cursor position for feedback
-            action.triggered.connect(lambda _=False, e=entry, pos=event.globalPos(): self._on_context_action(e, pos))
+        
+        # Add object's native context menu items
+        menu_spec = self._obj.get("contextmenu")
+        if isinstance(menu_spec, list):
+            for entry in menu_spec:
+                if not isinstance(entry, dict):
+                    continue
+                title = entry.get("title")
+                if not isinstance(title, str) or not title:
+                    continue
+                action = menu.addAction(title)
+                # Capture entry and cursor position for feedback
+                action.triggered.connect(lambda _=False, e=entry, pos=event.globalPos(): self._on_context_action(e, pos))
+        
+        # Add parts-based context menu items
+        obj_class = self._obj.get("class")
+        if isinstance(obj_class, str) and self._parts_registry:
+            # Find matching parts for this object class
+            matching_parts = []
+            for part_id, part_data in self._parts_registry.items():
+                class_list = part_data.get("ObjectClassList", [])
+                if not isinstance(class_list, list):
+                    continue
+                # Check if object's class matches any in the part's class list
+                if obj_class in class_list:
+                    matching_parts.append(part_data)
+            
+            # Add separator if we have both native and parts-based items
+            if not menu.isEmpty() and matching_parts:
+                menu.addSeparator()
+            
+            # Add each matching part as a context menu item
+            for part_data in matching_parts:
+                title = part_data.get("ContextMenuEntryName", "")
+                if not title:
+                    continue
+                action = menu.addAction(title)
+                # Execute the part's script with object title and id as arguments
+                action.triggered.connect(lambda _=False, pd=part_data: self._execute_part(pd))
+        
         if not menu.isEmpty():
             menu.exec_(event.globalPos())
             
+
+    def _execute_part(self, part_data: Dict[str, Any]) -> None:
+        """Execute a part's Python script in the same process."""
+        try:
+            script_path = part_data.get("ScriptPath")
+            if not script_path:
+                return
+            
+            # Get object title and id to pass as arguments
+            obj_title = self._obj.get("title", "")
+            obj_id = self._obj.get("id", "")
+            
+            # Execute the Python script in a separate process with args
+            # Note: We use subprocess instead of exec() for isolation
+            import subprocess
+            subprocess.Popen([sys.executable, script_path, obj_title, obj_id])
+        except Exception as e:
+            # Show error dialog if execution fails
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Error",
+                f"Failed to execute part: {str(e)}"
+            )
 
     def _on_context_action(self, entry: Dict[str, Any], pos: QtCore.QPoint) -> None:
         # Emit for higher-level handling and execute the action
@@ -440,6 +537,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.current_port: int = self.root_port
         self.selected_item: ObjectItemWidget | None = None
         self.current_objects: List[Dict[str, Any]] = []
+        # Parts storage: maps part unique ID to part metadata
+        self.parts_registry: Dict[str, Dict[str, Any]] = {}
+        # Provider name for organizing parts
+        self.provider_name: str = ""
 
         # Container for either grid view or table view
         self.view_container = QtWidgets.QStackedWidget(left_panel)
@@ -503,11 +604,15 @@ class MainWindow(QtWidgets.QMainWindow):
             info = {}
         root_name = info.get("RootName") if isinstance(info, dict) else None
         self.root_name = str(root_name) if root_name else "Root"
+        self.provider_name = self.root_name  # Use root name as provider identifier
         self._update_breadcrumb()
 
         # Decode and store icons announced by provider
         self.icon_store: Dict[str, QtGui.QPixmap] = {}
         self.add_icons_from_info(info)
+        
+        # Fetch and store parts from provider
+        self.load_parts_from_provider()
 
         self.grid_layout = grid_layout
         self.table_widget = table
@@ -733,7 +838,7 @@ class MainWindow(QtWidgets.QMainWindow):
             row = 0
             col = 0
             for obj in objects:
-                widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap, zoom_level=self._zoom_level)
+                widget = ObjectItemWidget(_obj_to_dict(obj), icon_lookup=self.get_icon_pixmap, zoom_level=self._zoom_level, parts_registry=self.parts_registry)
                 widget.activated.connect(self.on_item_activated)
                 widget.pressed.connect(self.on_item_pressed)
                 widget.clicked.connect(self.on_item_clicked)
@@ -799,6 +904,67 @@ class MainWindow(QtWidgets.QMainWindow):
                     self.icon_store[filename] = pix
         except Exception:
             # Keep existing cache on any parsing error
+            pass
+
+    def load_parts_from_provider(self) -> None:
+        """Fetch parts from provider and download their scripts locally."""
+        try:
+            # Fetch parts summary
+            parts_data = fetch_parts(self.current_host, self.current_port)
+            parts_list = parts_data.get("parts", []) if isinstance(parts_data, dict) else []
+            if not isinstance(parts_list, list):
+                return
+            
+            # Create Parts directory in browser if it doesn't exist
+            parts_base_dir = _THIS.parent / "Parts"
+            parts_base_dir.mkdir(exist_ok=True)
+            
+            # Create provider-specific subdirectory
+            # Sanitize provider name for filesystem use
+            safe_provider_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in self.provider_name)
+            provider_parts_dir = parts_base_dir / safe_provider_name
+            provider_parts_dir.mkdir(exist_ok=True)
+            
+            # Fetch each part's script
+            for part_summary in parts_list:
+                if not isinstance(part_summary, dict):
+                    continue
+                
+                unique_id = part_summary.get("UniqueID")
+                if not unique_id:
+                    continue
+                
+                # Fetch the full part including script
+                part_data = fetch_part(unique_id, self.current_host, self.current_port)
+                if not isinstance(part_data, dict) or "error" in part_data:
+                    continue
+                
+                script_content = part_data.get("PythonScript")
+                if not isinstance(script_content, str):
+                    continue
+                
+                # Save script to local file
+                # Use unique ID to create safe filename
+                safe_part_id = unique_id.replace("/", "_")
+                script_filename = f"{safe_part_id}.py"
+                script_path = provider_parts_dir / script_filename
+                
+                try:
+                    with open(script_path, "w", encoding="utf-8") as f:
+                        f.write(script_content)
+                    
+                    # Store part metadata in registry
+                    self.parts_registry[unique_id] = {
+                        "UniqueID": unique_id,
+                        "ContextMenuEntryName": part_data.get("ContextMenuEntryName", ""),
+                        "ObjectClassList": part_data.get("ObjectClassList", []),
+                        "ScriptPath": str(script_path)
+                    }
+                except Exception:
+                    continue
+                    
+        except Exception:
+            # Silently fail if parts are not supported or unavailable
             pass
 
     def load_root(self, host: Optional[str] = None, port: Optional[int] = None) -> None:

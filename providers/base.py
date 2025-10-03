@@ -74,6 +74,49 @@ class ObjectProvider(ABC):
         return False
 
     @staticmethod
+    def is_get_parts(message: Any) -> bool:
+        if isinstance(message, str):
+            return message.strip() == "GetParts"
+        if isinstance(message, dict):
+            candidate_keys = [
+                "method",
+                "message",
+                "type",
+                "command",
+                "action",
+            ]
+            if any(message.get(k) == "GetParts" for k in candidate_keys):
+                return True
+            if "GetParts" in message:
+                value = message.get("GetParts")
+                return bool(value) if value is not None else True
+        return False
+
+    @staticmethod
+    def is_get_part(message: Any) -> bool:
+        if isinstance(message, dict):
+            candidate_keys = [
+                "method",
+                "message",
+                "type",
+                "command",
+                "action",
+            ]
+            return any(message.get(k) == "GetPart" for k in candidate_keys)
+        if isinstance(message, str):
+            return message.strip() == "GetPart"
+        return False
+
+    @staticmethod
+    def extract_part_id(message: Any) -> Optional[str]:
+        if isinstance(message, dict):
+            for key in ["id", "partId", "PartId", "unique_id", "UniqueID"]:
+                value = message.get(key)
+                if isinstance(value, str):
+                    return value
+        return None
+
+    @staticmethod
     def is_get_objects(message: Any) -> bool:
         if isinstance(message, dict):
             candidate_keys = [
@@ -100,6 +143,8 @@ class ObjectProvider(ABC):
     # ---- Instance lifecycle ----
     def __init__(self, options: ProviderOptions) -> None:
         self.options = options
+        self.parts_inventory: Dict[str, Dict[str, Any]] = {}
+        self._load_parts_inventory()
 
     # ---- Message handling ----
     def handle_message(self, incoming: Any) -> Dict[str, Any]:
@@ -115,6 +160,23 @@ class ObjectProvider(ABC):
                 "RootName": self.options.root_name,
                 "icons": self._collect_icons_payload(),
             }
+        if self.is_get_parts(incoming):
+            try:
+                return self._get_parts_summary()
+            except Exception as exc:  # pragma: no cover - defensive
+                import traceback
+                traceback.print_exc()
+                return {"error": f"Failed to get parts: {exc}"}
+        if self.is_get_part(incoming):
+            part_id = self.extract_part_id(incoming)
+            if not part_id:
+                return {"error": "Missing part id"}
+            try:
+                return self._get_part_content(part_id)
+            except Exception as exc:  # pragma: no cover - defensive
+                import traceback
+                traceback.print_exc()
+                return {"error": f"Failed to get part: {exc}"}
         if self.is_get_objects(incoming):
             object_id = self.extract_object_id(incoming)
             if not object_id:
@@ -253,6 +315,70 @@ class ObjectProvider(ABC):
         except Exception:
             return []
         return icons
+
+    # ---- Parts management ----
+    def _load_parts_inventory(self) -> None:
+        """Load parts inventory from Parts directory if it exists."""
+        try:
+            parts_dir = self.options.provider_dir / "Parts"
+            if not parts_dir.exists() or not parts_dir.is_dir():
+                return
+            
+            for entry in parts_dir.iterdir():
+                if not entry.is_file() or entry.suffix.lower() != ".json":
+                    continue
+                try:
+                    with open(entry, "r", encoding="utf-8") as f:
+                        part_data = json.load(f)
+                    
+                    unique_id = part_data.get("UniqueID")
+                    if not unique_id:
+                        continue
+                    
+                    # Store part metadata
+                    self.parts_inventory[unique_id] = {
+                        "UniqueID": unique_id,
+                        "ContextMenuEntryName": part_data.get("ContextMenuEntryName", ""),
+                        "PythonScript": part_data.get("PythonScript", ""),
+                        "ObjectClassList": part_data.get("ObjectClassList", []),
+                        "ScriptPath": parts_dir / part_data.get("PythonScript", "")
+                    }
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _get_parts_summary(self) -> Dict[str, Any]:
+        """Return summary information for all parts."""
+        parts = []
+        for unique_id, part_data in self.parts_inventory.items():
+            parts.append({
+                "UniqueID": unique_id,
+                "ContextMenuEntryName": part_data["ContextMenuEntryName"],
+                "ObjectClassList": part_data["ObjectClassList"]
+            })
+        return {"parts": parts}
+
+    def _get_part_content(self, part_id: str) -> Dict[str, Any]:
+        """Return the Python script content for a specific part."""
+        if part_id not in self.parts_inventory:
+            return {"error": f"Part {part_id} not found"}
+        
+        part_data = self.parts_inventory[part_id]
+        script_path = part_data["ScriptPath"]
+        
+        try:
+            with open(script_path, "r", encoding="utf-8") as f:
+                script_content = f.read()
+            
+            return {
+                "UniqueID": part_id,
+                "ContextMenuEntryName": part_data["ContextMenuEntryName"],
+                "ObjectClassList": part_data["ObjectClassList"],
+                "PythonScript": script_content
+            }
+        except Exception as exc:
+            return {"error": f"Failed to read script: {exc}"}
 
     # ---- Command path processing (optional helpers for subclasses) ----
     def build_objects_for_path(

@@ -7,4 +7,5 @@ providers/ResearchComputingAtIU/__pycache__/*
 .DS_Store
 providers/Accounts/__pycache__/*
 media/t/*
-
+providers/Slurm/Parts/__pycache__/*
+browsers/PythonQT5/Parts/*

@@ -517,15 +517,22 @@ def main():
         description="Submit interactive Slurm job with X11 forwarding"
     )
     parser.add_argument(
-        "partition",
-        help="Partition name to submit the job to"
+        "object_title",
+        help="Title of the partition object"
+    )
+    parser.add_argument(
+        "object_id",
+        help="ID of the partition object"
     )
     args = parser.parse_args()
+    
+    # Extract partition name from object_title (the title is the partition name)
+    partition_name = args.object_title
     
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName("Submit Interactive Job")
     
-    dialog = InteractiveJobDialog(args.partition)
+    dialog = InteractiveJobDialog(partition_name)
     result = dialog.exec_()
     
     sys.exit(0 if result == QtWidgets.QDialog.Accepted else 1)

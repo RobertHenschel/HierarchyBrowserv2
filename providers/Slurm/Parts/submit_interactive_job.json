@@ -1,0 +1,7 @@
+{
+  "UniqueID": "Slurm/SubmitInteractiveJob",
+  "ContextMenuEntryName": "Submit Interactive Job",
+  "PythonScript": "submit_interactive_job.py",
+  "ObjectClassList": ["WPSlurmPartition"]
+}
+
